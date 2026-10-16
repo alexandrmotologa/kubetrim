@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <clipPath id="squircle-clip">
+      <rect x="24" y="24" width="976" height="976" rx="220" />
+    </clipPath>
+
+    <linearGradient id="emerald-glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399"/>
+      <stop offset="50%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+
+    <linearGradient id="cyan-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f5ff"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+
+    <linearGradient id="obsidian-dark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="100%" stop-color="#0b0f19"/>
+    </linearGradient>
+
+    <filter id="subtle-shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#0b0f19" flood-opacity="0.14" />
+    </filter>
+  </defs>
+
+  <!-- Luxury White Squircle Container -->
+  <rect x="24" y="24" width="976" height="976" rx="220" fill="#ffffff" stroke="#e2e8f0" stroke-width="6" />
+
+  <g clip-path="url(#squircle-clip)">
+    <g transform="translate(512, 512)" filter="url(#subtle-shadow)">
+
+      <!-- Hexagonal Architectural Gateway Frame -->
+      <polygon points="
+        0,-390
+        338,-195
+        338,195
+        0,390
+        -338,195
+        -338,-195
+      " fill="none" stroke="#0f172a" stroke-width="36" stroke-linejoin="round" />
+
+      <!-- Inner Kubernetes Steering Orbit & Precision Ticks -->
+      <polygon points="
+        0,-355
+        307,-177
+        307,177
+        0,355
+        -307,177
+        -307,-177
+      " fill="none" stroke="#00f5ff" stroke-width="4" opacity="0.35" stroke-dasharray="16, 12" />
+
+      <!-- Kubernetes Steering Helm Spokes (Subtle Architectural Radians) -->
+      <line x1="0" y1="-390" x2="0" y2="-280" stroke="#10b981" stroke-width="8" stroke-linecap="round" />
+      <line x1="338" y1="-195" x2="242" y2="-140" stroke="#10b981" stroke-width="8" stroke-linecap="round" />
+      <line x1="338" y1="195" x2="242" y2="140" stroke="#10b981" stroke-width="8" stroke-linecap="round" />
+      <line x1="0" y1="390" x2="0" y2="280" stroke="#10b981" stroke-width="8" stroke-linecap="round" />
+      <line x1="-338" y1="195" x2="-242" y2="140" stroke="#10b981" stroke-width="8" stroke-linecap="round" />
+      <line x1="-338" y1="-195" x2="-242" y2="-140" stroke="#10b981" stroke-width="8" stroke-linecap="round" />
+
+      <!-- Solid Watertight Base Silhouette: The Trim Falcon -->
+      <path d="
+        M 0,-250
+        L 75,-215 L 140,-130 L 225,-60 L 275,50 L 290,160 L 210,210 L 145,290 L 85,240 L 0,270
+        L -85,240 L -145,290 L -210,210 L -290,160 L -275,50 L -225,-60 L -140,-130 L -75,-215
+        Z
+      " fill="#0b0f19" />
+
+      <!-- Volumetric Low-Poly Facets (Symmetrical Across Vertical Axis) -->
+      <!-- Outer Wing Sweeps (Top) -->
+      <polygon points="0,-250 75,-215 140,-130 0,-165" fill="#334155" />
+      <polygon points="0,-250 -75,-215 -140,-130 0,-165" fill="#1e293b" />
+
+      <!-- Mid Wing Primary Flanges -->
+      <polygon points="140,-130 225,-60 170,10 0,-165" fill="#475569" />
+      <polygon points="-140,-130 -225,-60 -170,10 0,-165" fill="#0f172a" />
+
+      <!-- Wing Outer Aerodynamic Trim Blades -->
+      <polygon points="225,-60 275,50 215,80 170,10" fill="#64748b" />
+      <polygon points="-225,-60 -275,50 -215,80 -170,10" fill="#1e293b" />
+
+      <!-- Lower Wing Trailing Edges -->
+      <polygon points="275,50 290,160 210,210 215,80" fill="#334155" />
+      <polygon points="-275,50 -290,160 -210,210 -215,80" fill="#0b0f19" />
+
+      <!-- Lower Wing Inner Flaps -->
+      <polygon points="210,210 145,290 120,200 215,80" fill="#475569" />
+      <polygon points="-210,210 -145,290 -120,200 -215,80" fill="#1e293b" />
+
+      <!-- Falcon Head & Brow Armor -->
+      <polygon points="0,-250 45,-190 0,-150" fill="#94a3b8" />
+      <polygon points="0,-250 -45,-190 0,-150" fill="#64748b" />
+
+      <!-- Temporal Cheeks -->
+      <polygon points="45,-190 95,-130 0,-110 0,-150" fill="#cbd5e1" />
+      <polygon points="-45,-190 -95,-130 0,-110 0,-150" fill="#475569" />
+
+      <!-- Razor Beak (Trimming Blade) -->
+      <polygon points="0,-110 28,-75 0,-40" fill="#f8fafc" />
+      <polygon points="0,-110 -28,-75 0,-40" fill="#94a3b8" />
+      <polygon points="0,-40 22,-75 0,-10" fill="#00f5ff" />
+      <polygon points="0,-40 -22,-75 0,-10" fill="#0284c7" />
+
+      <!-- Alert Predatory Almond Eyes (Electric Cyan FinOps Telemetry) -->
+      <polygon points="35,-140 70,-150 55,-132" fill="#00f5ff" />
+      <polygon points="40,-139 52,-142 46,-136" fill="#ffffff" />
+
+      <polygon points="-35,-140 -70,-150 -55,-132" fill="#00f5ff" />
+      <polygon points="-40,-139 -52,-142 -46,-136" fill="#ffffff" />
+
+      <!-- Central FinOps Preserved Capital Core: Emerald Diamond Jewel -->
+      <polygon points="0,-30 75,55 0,140 -75,55" fill="url(#emerald-glow)" filter="url(#subtle-shadow)" />
+      <!-- Faceted Core Reflections -->
+      <polygon points="0,-30 75,55 0,55" fill="#6ee7b7" opacity="0.6" />
+      <polygon points="0,55 75,55 0,140" fill="#047857" opacity="0.7" />
+      <polygon points="0,-30 -75,55 0,55" fill="#34d399" opacity="0.4" />
+      <polygon points="0,55 -75,55 0,140" fill="#065f46" opacity="0.9" />
+
+      <!-- Kubernetes "K" Emblem in Diamond Center -->
+      <path d="
+        M -18,15 L -6,15 L -6,95 L -18,95 Z
+        M 18,15 L 6,15 L -6,55 L 6,55 Z
+        M -3,55 L 20,95 L 6,95 L -12,65 Z
+      " fill="#ffffff" opacity="0.95" />
+
+      <!-- Lower Tail Precision Rudder -->
+      <polygon points="0,140 60,190 0,265 -60,190" fill="#1e293b" />
+      <polygon points="0,140 60,190 0,265" fill="#334155" />
+      <polygon points="0,265 40,240 0,270 -40,240" fill="#00f5ff" opacity="0.7" />
+
+      <!-- Outer Status Ticks -->
+      <circle cx="0" cy="-390" r="14" fill="#10b981" stroke="#ffffff" stroke-width="4" />
+      <circle cx="338" cy="-195" r="14" fill="#00f5ff" stroke="#ffffff" stroke-width="4" />
+      <circle cx="338" cy="195" r="14" fill="#10b981" stroke="#ffffff" stroke-width="4" />
+      <circle cx="0" cy="390" r="14" fill="#00f5ff" stroke="#ffffff" stroke-width="4" />
+      <circle cx="-338" cy="195" r="14" fill="#10b981" stroke="#ffffff" stroke-width="4" />
+      <circle cx="-338" cy="-195" r="14" fill="#00f5ff" stroke="#ffffff" stroke-width="4" />
+
+    </g>
+  </g>
+</svg>
