@@ -244,6 +244,7 @@ def scan(
 @app.command()
 def gate(
     manifest: Optional[Path] = typer.Argument(None, help="Path to local Kubernetes manifest file or directory"),
+    manifest_opt: Optional[Path] = typer.Option(None, "--manifest", "-m", help="Path to local Kubernetes manifest file or directory"),
     max_waste_usd: float = typer.Option(50.0, "--max-waste-usd", help="Maximum allowable monthly dollar waste"),
     max_waste_pct: float = typer.Option(25.0, "--max-waste-pct", help="Maximum allowable waste percentage"),
     fail_on_waste: bool = typer.Option(True, "--fail-on-waste / --no-fail-on-waste", help="Exit code 1 if thresholds exceeded"),
@@ -252,15 +253,16 @@ def gate(
     profile: str = typer.Option("balanced", "--profile", help="Rightsizing profile"),
 ):
     """Enforces FinOps budget gates in CI pipelines, exiting with code 1 if waste thresholds are breached."""
+    target_manifest = manifest_opt or manifest
     pricing = load_pricing_model(provider)
     rightsizer_profile = load_profile(profile)
     advisor = RightsizingAdvisor(rightsizer_profile, pricing)
 
-    if manifest and manifest.exists():
+    if target_manifest and target_manifest.exists():
         workloads = (
-            KubernetesClient.scan_manifest_directory(str(manifest))
-            if manifest.is_dir()
-            else KubernetesClient.parse_manifest_file(str(manifest))
+            KubernetesClient.scan_manifest_directory(str(target_manifest))
+            if target_manifest.is_dir()
+            else KubernetesClient.parse_manifest_file(str(target_manifest))
         )
         recs = []
         for w in workloads:
@@ -443,25 +445,27 @@ def contexts():
 
 @app.command()
 def diff(
-    manifest: Path = typer.Argument(..., help="Path to Kubernetes YAML manifest file or directory"),
+    manifest: Optional[Path] = typer.Argument(None, help="Path to Kubernetes YAML manifest file or directory"),
+    manifest_opt: Optional[Path] = typer.Option(None, "--manifest", "-m", help="Path to Kubernetes YAML manifest file or directory"),
     provider: str = typer.Option("aws", "--provider", "-p", help="Cloud provider rate card"),
     profile: str = typer.Option("balanced", "--profile", help="Rightsizing profile"),
     kustomize: bool = typer.Option(False, "--kustomize", help="Generate Kustomize strategic merge patch syntax"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Write diff to destination file"),
 ):
     """Generates unified git diff or Kustomize patch for local Kubernetes manifest files."""
-    if not manifest.exists():
-        console.print(f"[red]Error: Manifest path '{manifest}' does not exist.[/red]")
+    target_manifest = manifest_opt or manifest
+    if not target_manifest or not target_manifest.exists():
+        console.print(f"[red]Error: Manifest path '{target_manifest}' does not exist.[/red]")
         raise typer.Exit(1)
 
     workloads = (
-        KubernetesClient.scan_manifest_directory(str(manifest))
-        if manifest.is_dir()
-        else KubernetesClient.parse_manifest_file(str(manifest))
+        KubernetesClient.scan_manifest_directory(str(target_manifest))
+        if target_manifest.is_dir()
+        else KubernetesClient.parse_manifest_file(str(target_manifest))
     )
 
     if not workloads:
-        console.print(f"[yellow]No Deployments or StatefulSets found in '{manifest}'[/yellow]")
+        console.print(f"[yellow]No Deployments or StatefulSets found in '{target_manifest}'[/yellow]")
         return
 
     pricing = load_pricing_model(provider)
@@ -499,28 +503,30 @@ def diff(
 
 @app.command()
 def patch(
-    path: Path = typer.Argument(..., help="Path to Helm values.yaml or Kubernetes YAML manifest"),
+    path: Optional[Path] = typer.Argument(None, help="Path to Helm values.yaml or Kubernetes YAML manifest"),
+    file_opt: Optional[Path] = typer.Option(None, "--helm-values", "--manifest", "-f", help="Target Helm values.yaml or manifest file"),
     provider: str = typer.Option("aws", "--provider", "-p", help="Cloud provider rate card"),
     profile: str = typer.Option("balanced", "--profile", help="Rightsizing profile"),
     write: bool = typer.Option(False, "--write", "-w", help="Apply patch directly to the file"),
     backup: bool = typer.Option(True, "--backup", help="Create backup .bak file before in-place write"),
 ):
     """Patches Helm values.yaml or Kubernetes manifests in-place with rightsized resources."""
-    if not path.is_file():
-        console.print(f"[red]Error: Target file '{path}' does not exist.[/red]")
+    target_path = file_opt or path
+    if not target_path or not target_path.is_file():
+        console.print(f"[red]Error: Target file '{target_path}' does not exist.[/red]")
         raise typer.Exit(1)
 
     pricing = load_pricing_model(provider)
     rightsizer_profile = load_profile(profile)
     advisor = RightsizingAdvisor(rightsizer_profile, pricing)
 
-    if "values" in path.name.lower():
+    if "values" in target_path.name.lower():
         cluster = get_synthetic_cluster()
         first_spec, first_metrics = cluster[0]
         rec = advisor.advise_workload(first_spec, first_metrics)
-        new_yaml, diff_str = apply_helm_file_patch(str(path), rec, write=write, backup=backup)
+        new_yaml, diff_str = apply_helm_file_patch(str(target_path), rec, write=write, backup=backup)
     else:
-        workloads = KubernetesClient.parse_manifest_file(str(path))
+        workloads = KubernetesClient.parse_manifest_file(str(target_path))
         if workloads:
             target_w = workloads[0]
             target_m = _find_or_estimate_metrics(target_w)
