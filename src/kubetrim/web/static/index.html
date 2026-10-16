@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KubeTrim - Zero-Agent Kubernetes FinOps Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --surface: #111827;
+      --surface-hover: #172235;
+      --border: #1f2937;
+      --border-light: rgba(255, 255, 255, 0.08);
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --text-subtle: #6b7280;
+      --accent: #3b82f6;
+      --accent-glow: rgba(59, 130, 246, 0.15);
+      --emerald: #10b981;
+      --emerald-glow: rgba(16, 185, 129, 0.15);
+      --amber: #f59e0b;
+      --rose: #ef4444;
+      --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.85rem 2rem;
+      position: sticky;
+      top: 0;
+      z-index: 40;
+    }
+    .nav-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      color: var(--text);
+    }
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #2563eb, #10b981);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: #fff;
+    }
+    .brand-text {
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .badge-zero {
+      background: var(--accent-glow);
+      color: var(--accent);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      padding: 0.2rem 0.6rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .nav-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+    .select-input, .btn {
+      background: #1f2937;
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 0.45rem 0.85rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-family: inherit;
+      outline: none;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .select-input:hover, .btn:hover {
+      border-color: #374151;
+      background: #283548;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      font-weight: 600;
+    }
+    .btn-primary:hover {
+      background: #2563eb;
+    }
+
+    /* Main Container */
+    main {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+      width: 100%;
+      flex: 1;
+    }
+
+    /* KPI Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: transparent;
+    }
+    .kpi-card.green::before { background: var(--emerald); }
+    .kpi-card.blue::before { background: var(--accent); }
+    .kpi-card.amber::before { background: var(--amber); }
+
+    .kpi-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+    .kpi-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .kpi-pill {
+      font-size: 0.75rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 9999px;
+      font-weight: 600;
+    }
+    .kpi-pill.green { background: var(--emerald-glow); color: var(--emerald); }
+    .kpi-pill.blue { background: var(--accent-glow); color: var(--accent); }
+
+    .kpi-val {
+      font-size: 1.85rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .kpi-val.green { color: var(--emerald); }
+    .kpi-val.blue { color: var(--accent); }
+    .kpi-desc {
+      font-size: 0.8rem;
+      color: var(--text-subtle);
+      margin-top: 0.4rem;
+    }
+
+    /* Charts Section */
+    .visual-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
+    @media (max-width: 900px) {
+      .visual-row { grid-template-columns: 1fr; }
+    }
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+    .card-title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .spend-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .bar-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .bar-info {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+    }
+    .bar-track {
+      height: 14px;
+      background: #1f2937;
+      border-radius: 9999px;
+      overflow: hidden;
+      display: flex;
+    }
+    .bar-fill-current {
+      background: #4b5563;
+      height: 100%;
+      border-radius: 9999px;
+      transition: width 0.5s ease;
+    }
+    .bar-fill-rec {
+      background: var(--accent);
+      height: 100%;
+      border-radius: 9999px;
+      transition: width 0.5s ease;
+    }
+    .bar-fill-save {
+      background: var(--emerald);
+      height: 100%;
+      border-radius: 9999px;
+      transition: width 0.5s ease;
+    }
+
+    /* Controls Bar */
+    .controls-bar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .search-input {
+      background: #1f2937;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.45rem 0.85rem;
+      color: var(--text);
+      font-size: 0.85rem;
+      font-family: inherit;
+      width: 240px;
+      outline: none;
+    }
+    .search-input:focus {
+      border-color: var(--accent);
+    }
+    .tab-pills {
+      display: flex;
+      gap: 0.25rem;
+      background: #1f2937;
+      padding: 0.2rem;
+      border-radius: 8px;
+    }
+    .tab-pill {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.35rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tab-pill.active {
+      background: #374151;
+      color: #fff;
+    }
+
+    /* Workloads Table */
+    .table-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.88rem;
+    }
+    th {
+      background: rgba(255, 255, 255, 0.02);
+      padding: 0.85rem 1rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    td {
+      padding: 0.9rem 1rem;
+      border-bottom: 1px solid var(--border-light);
+    }
+    tr:hover td {
+      background: var(--surface-hover);
+    }
+    .mono { font-family: var(--mono); font-size: 0.82rem; }
+    .text-emerald { color: var(--emerald); font-weight: 600; }
+    .text-accent { color: var(--accent); }
+    .tag {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+    .tag-neutral { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+    .tag-danger { background: rgba(239, 68, 68, 0.15); color: var(--rose); border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    .action-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--accent);
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 500;
+      transition: all 0.15s ease;
+    }
+    .action-btn:hover {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 750px;
+      max-width: 90vw;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    .modal-header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    .modal-body {
+      padding: 1.5rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .modal-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.5rem;
+    }
+    .code-preview {
+      background: #090d16;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      color: #e5e7eb;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .modal-footer {
+      padding: 1rem 1.5rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: #1f2937;
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 0.65rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      display: none;
+      z-index: 120;
+    }
+    .toast.active { display: block; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="nav-container">
+      <a href="#" class="brand">
+        <div class="brand-icon">K</div>
+        <div class="brand-text">KubeTrim <span class="badge-zero">Zero-Agent FinOps</span></div>
+      </a>
+      <div class="nav-controls">
+        <select id="select-provider" class="select-input" onchange="applyFilters()">
+          <option value="aws">AWS EKS (us-east-1)</option>
+          <option value="gcp">GCP GKE (us-central1)</option>
+          <option value="azure">Azure AKS (eastus)</option>
+          <option value="baremetal">Bare-Metal / On-Prem</option>
+        </select>
+        <select id="select-profile" class="select-input" onchange="applyFilters()">
+          <option value="conservative">Conservative (+40% p99)</option>
+          <option value="balanced" selected>Balanced (+20% p95)</option>
+          <option value="aggressive">Aggressive (+10% p90)</option>
+        </select>
+        <button class="btn" onclick="exportData('csv')">Export CSV</button>
+        <button class="btn btn-primary" onclick="exportData('html')">Export HTML</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- KPI Summary Grid -->
+    <div class="kpi-grid">
+      <div class="kpi-card blue">
+        <div class="kpi-header">
+          <span class="kpi-title">Current Spend</span>
+          <span class="kpi-pill blue" id="kpi-workload-count">0 Workloads</span>
+        </div>
+        <div class="kpi-val blue" id="kpi-current">$0.00</div>
+        <div class="kpi-desc" id="kpi-replicas-count">Based on active pod requested capacity</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">Right-sized Spend</span>
+          <span class="kpi-pill blue" id="kpi-active-profile">BALANCED</span>
+        </div>
+        <div class="kpi-val" id="kpi-rightsized">$0.00</div>
+        <div class="kpi-desc">Calculated with safety buffer headroom</div>
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-header">
+          <span class="kpi-title">Monthly Recoverable Waste</span>
+          <span class="kpi-pill green" id="kpi-savings-pct">0.0%</span>
+        </div>
+        <div class="kpi-val green" id="kpi-savings">$0.00</div>
+        <div class="kpi-desc">Immediate recurring cloud budget savings</div>
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-header">
+          <span class="kpi-title">Projected Annual Savings</span>
+          <span class="kpi-pill green">ARR</span>
+        </div>
+        <div class="kpi-val green" id="kpi-annual">$0.00</div>
+        <div class="kpi-desc">12-month run-rate cost reduction</div>
+      </div>
+    </div>
+
+    <!-- Visualizer Row -->
+    <div class="visual-row">
+      <div class="chart-card">
+        <div class="card-title">
+          <span>Cost Rightsizing Distribution</span>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">Current vs Recommended ($/month)</span>
+        </div>
+        <div class="spend-bars" id="spend-bars-container">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="card-title">
+          <span>Cluster Efficiency</span>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">Waste Ratio</span>
+        </div>
+        <div style="height: 180px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 0.75rem;">
+          <div style="font-size: 2.75rem; font-weight: 700; color: var(--emerald);" id="efficiency-metric">0%</div>
+          <div style="font-size: 0.85rem; color: var(--text-muted); text-align: center;">Cluster Resource Over-Allocation</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls Bar -->
+    <div class="controls-bar">
+      <div class="filter-group">
+        <input type="text" id="search-input" class="search-input" placeholder="Search workload, namespace..." oninput="renderTable()" />
+        <div class="tab-pills" id="ns-pills">
+          <button class="tab-pill active" onclick="setNamespaceFilter('all')">All</button>
+        </div>
+      </div>
+      <div style="font-size: 0.85rem; color: var(--text-muted);" id="table-summary-info">
+        Showing 0 workloads
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr>
+            <th>Workload</th>
+            <th>Type / Rep</th>
+            <th>Container</th>
+            <th>Current Requests</th>
+            <th>Recommended Requests</th>
+            <th>Current $/mo</th>
+            <th>Rec $/mo</th>
+            <th>Monthly Savings</th>
+            <th>Flags</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="workloads-tbody">
+          <!-- Populated by JS -->
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- Patch Modal -->
+  <div class="modal-overlay" id="patch-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-workload-title">Patch Inspector</div>
+        <button class="action-btn" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-tabs">
+          <button class="tab-pill active" id="tab-kustomize" onclick="switchModalTab('kustomize')">Kustomize Overlay</button>
+          <button class="tab-pill" id="tab-kubectl" onclick="switchModalTab('kubectl')">Kubectl One-Liner</button>
+        </div>
+        <div class="code-preview" id="modal-code-content"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="copyModalContent()">Copy to Clipboard</button>
+        <button class="btn btn-primary" onclick="closeModal()">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Copied to clipboard!</div>
+
+  <script>
+    let currentData = null;
+    let activeNamespace = 'all';
+    let currentModalData = null;
+    let activeModalTab = 'kustomize';
+
+    async function fetchData() {
+      const provider = document.getElementById('select-provider').value;
+      const profile = document.getElementById('select-profile').value;
+
+      try {
+        const resp = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider, profile, namespace: null })
+        });
+        currentData = await resp.json();
+        updateUI();
+      } catch (err) {
+        console.error('Fetch error:', err);
+      }
+    }
+
+    function applyFilters() {
+      fetchData();
+    }
+
+    function updateUI() {
+      if (!currentData) return;
+
+      document.getElementById('kpi-current').innerText = `$${currentData.total_current_monthly_cost.toFixed(2)}`;
+      document.getElementById('kpi-rightsized').innerText = `$${currentData.total_recommended_monthly_cost.toFixed(2)}`;
+      document.getElementById('kpi-savings').innerText = `+$${currentData.total_monthly_savings.toFixed(2)}`;
+      document.getElementById('kpi-savings-pct').innerText = `${currentData.total_savings_pct}%`;
+      document.getElementById('kpi-annual').innerText = `$${currentData.annual_savings.toFixed(2)}`;
+      document.getElementById('kpi-workload-count').innerText = `${currentData.total_workloads} Workloads`;
+      document.getElementById('kpi-replicas-count').innerText = `${currentData.total_replicas} total pod replicas evaluated`;
+      document.getElementById('kpi-active-profile').innerText = currentData.profile_name.toUpperCase();
+      document.getElementById('efficiency-metric').innerText = `${currentData.total_savings_pct}%`;
+
+      // Update Namespace Filter Pills
+      const namespaces = Array.from(new Set(currentData.recommendations.map(w => w.namespace)));
+      const pillsContainer = document.getElementById('ns-pills');
+      pillsContainer.innerHTML = `<button class="tab-pill ${activeNamespace === 'all' ? 'active' : ''}" onclick="setNamespaceFilter('all')">All</button>`;
+      namespaces.forEach(ns => {
+        pillsContainer.innerHTML += `<button class="tab-pill ${activeNamespace === ns ? 'active' : ''}" onclick="setNamespaceFilter('${ns}')">${ns}</button>`;
+      });
+
+      renderBars();
+      renderTable();
+    }
+
+    function renderBars() {
+      const container = document.getElementById('spend-bars-container');
+      const recs = currentData.recommendations.slice(0, 5);
+      let html = '';
+
+      recs.forEach(w => {
+        const maxSpend = Math.max(...currentData.recommendations.map(x => x.total_current_monthly_cost), 100);
+        const currWidth = Math.min(100, Math.round((w.total_current_monthly_cost / maxSpend) * 100));
+        const recWidth = Math.min(100, Math.round((w.total_recommended_monthly_cost / maxSpend) * 100));
+
+        html += `
+          <div class="bar-row">
+            <div class="bar-info">
+              <span><strong>${w.namespace}</strong>/${w.workload_name}</span>
+              <span class="mono text-emerald">Save $${w.total_monthly_savings.toFixed(2)}/mo (${w.savings_pct}%)</span>
+            </div>
+            <div class="bar-track">
+              <div class="bar-fill-rec" style="width: ${recWidth}%;"></div>
+              <div class="bar-fill-save" style="width: ${currWidth - recWidth}%;"></div>
+            </div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    function renderTable() {
+      if (!currentData) return;
+      const tbody = document.getElementById('workloads-tbody');
+      const search = document.getElementById('search-input').value.toLowerCase().trim();
+
+      const filtered = currentData.recommendations.filter(w => {
+        if (activeNamespace !== 'all' && w.namespace !== activeNamespace) return false;
+        if (search) {
+          const matchName = w.workload_name.toLowerCase().includes(search);
+          const matchNs = w.namespace.toLowerCase().includes(search);
+          const matchContainer = w.containers.some(c => c.container_name.toLowerCase().includes(search));
+          return matchName || matchNs || matchContainer;
+        }
+        return true;
+      });
+
+      document.getElementById('table-summary-info').innerText = `Showing ${filtered.length} of ${currentData.recommendations.length} workloads`;
+
+      let html = '';
+      filtered.forEach(w => {
+        w.containers.forEach(c => {
+          const flagsHtml = c.oomkill_detected 
+            ? '<span class="tag tag-danger">OOMKill Guard (+40% RAM)</span>'
+            : '<span class="tag tag-neutral">Normal</span>';
+
+          html += `
+            <tr>
+              <td><strong>${w.namespace}</strong>/${w.workload_name}</td>
+              <td><span class="tag tag-neutral">${w.workload_kind} &times;${w.replicas}</span></td>
+              <td class="mono">${c.container_name}</td>
+              <td class="mono">${c.current_request_cpu} / ${c.current_request_memory}</td>
+              <td class="mono text-emerald">${c.recommended_request_cpu} / ${c.recommended_request_memory}</td>
+              <td>$${c.current_monthly_cost.toFixed(2)}</td>
+              <td>$${c.recommended_monthly_cost.toFixed(2)}</td>
+              <td class="text-emerald">+$${c.monthly_savings.toFixed(2)} (${c.savings_pct}%)</td>
+              <td>${flagsHtml}</td>
+              <td>
+                <button class="action-btn" onclick="openPatchModal('${w.namespace}', '${w.workload_name}')">Patch</button>
+              </td>
+            </tr>
+          `;
+        });
+      });
+
+      tbody.innerHTML = html;
+    }
+
+    function setNamespaceFilter(ns) {
+      activeNamespace = ns;
+      updateUI();
+    }
+
+    async function openPatchModal(ns, name) {
+      try {
+        const resp = await fetch(`/api/patch/${ns}/${name}`);
+        currentModalData = await resp.json();
+        document.getElementById('modal-workload-title').innerText = `Patch: ${ns}/${name}`;
+        activeModalTab = 'kustomize';
+        updateModalContent();
+        document.getElementById('patch-modal').classList.add('active');
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function switchModalTab(tab) {
+      activeModalTab = tab;
+      document.getElementById('tab-kustomize').classList.toggle('active', tab === 'kustomize');
+      document.getElementById('tab-kubectl').classList.toggle('active', tab === 'kubectl');
+      updateModalContent();
+    }
+
+    function updateModalContent() {
+      if (!currentModalData) return;
+      const content = activeModalTab === 'kustomize' 
+        ? currentModalData.kustomize_patch 
+        : currentModalData.kubectl_command;
+      document.getElementById('modal-code-content').innerText = content;
+    }
+
+    function closeModal() {
+      document.getElementById('patch-modal').classList.remove('active');
+    }
+
+    function copyModalContent() {
+      const text = document.getElementById('modal-code-content').innerText;
+      navigator.clipboard.writeText(text);
+      showToast('Copied patch to clipboard!');
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.innerText = msg;
+      t.classList.add('active');
+      setTimeout(() => t.classList.remove('active'), 2500);
+    }
+
+    function exportData(format) {
+      window.open(`/api/export/${format}`, '_blank');
+    }
+
+    // Initialize
+    fetchData();
+  </script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+# Helm values configuration for production services
+replicaCount: 4
+
+image:
+  repository: registry.company.internal/checkout-service
+  pullPolicy: IfNotPresent
+  tag: "v1.4.2"
+
+# Pod resource limits and requests
+resources:
+  requests:
+    cpu: 2000m
+    memory: 4Gi
+  limits:
+    cpu: 4000m
+    memory: 8Gi
+
+service:
+  type: ClusterIP
+  port: 80

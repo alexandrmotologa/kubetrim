@@ -1,0 +1,11 @@
+{
+  "provider": "gcp",
+  "region": "us-central1",
+  "currency": "USD",
+  "rates": {
+    "cpu_per_vcpu_hour": 0.03350,
+    "memory_per_gb_hour": 0.00449,
+    "cluster_base_hour": 0.10
+  },
+  "description": "GCP us-central1 GKE compute allocation rates based on standard E2/N2 instances."
+}

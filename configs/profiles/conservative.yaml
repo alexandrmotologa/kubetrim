@@ -1,0 +1,11 @@
+name: conservative
+description: High-safety profile with 40% headroom buffer over p99 historical utilization, designed for critical production workloads.
+target_percentile: 0.99
+cpu_headroom_buffer: 0.40
+memory_headroom_buffer: 0.40
+oomkill_extra_buffer: 0.50
+min_cpu_cores: 0.05
+min_memory_mb: 64.0
+limit_cpu_multiplier: 1.50
+limit_memory_multiplier: 1.25
+qos_class_preference: burstable

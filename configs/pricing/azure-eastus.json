@@ -1,0 +1,11 @@
+{
+  "provider": "azure",
+  "region": "eastus",
+  "currency": "USD",
+  "rates": {
+    "cpu_per_vcpu_hour": 0.03800,
+    "memory_per_gb_hour": 0.00510,
+    "cluster_base_hour": 0.10
+  },
+  "description": "Azure eastus AKS compute allocation rates based on general purpose D-series v5."
+}

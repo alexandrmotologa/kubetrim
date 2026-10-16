@@ -1,0 +1,11 @@
+name: aggressive
+description: Cost-optimized profile targeting p90 utilization with a 10% safety headroom buffer, suited for non-production environments and batch jobs.
+target_percentile: 0.90
+cpu_headroom_buffer: 0.10
+memory_headroom_buffer: 0.10
+oomkill_extra_buffer: 0.30
+min_cpu_cores: 0.01
+min_memory_mb: 16.0
+limit_cpu_multiplier: 1.25
+limit_memory_multiplier: 1.15
+qos_class_preference: burstable

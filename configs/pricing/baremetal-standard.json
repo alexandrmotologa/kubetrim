@@ -1,0 +1,11 @@
+{
+  "provider": "baremetal",
+  "region": "default",
+  "currency": "USD",
+  "rates": {
+    "cpu_per_vcpu_hour": 0.02000,
+    "memory_per_gb_hour": 0.00250,
+    "cluster_base_hour": 0.00
+  },
+  "description": "On-premise or bare-metal internal compute amortization rate."
+}

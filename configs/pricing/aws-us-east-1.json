@@ -1,0 +1,11 @@
+{
+  "provider": "aws",
+  "region": "us-east-1",
+  "currency": "USD",
+  "rates": {
+    "cpu_per_vcpu_hour": 0.04048,
+    "memory_per_gb_hour": 0.004445,
+    "cluster_base_hour": 0.10
+  },
+  "description": "AWS us-east-1 reference compute pricing based on EKS Fargate and EC2 general purpose m6i allocation."
+}
