@@ -44,11 +44,16 @@ KubeTrim runs locally or in CI pipelines without installing cluster agents. It r
 - **Zero-agent architecture**: Operates in read-only mode using existing `~/.kube/config` credentials. No cluster controllers, webhooks, or node daemonsets required.
 - **Historical metric aggregation**: Evaluates PromQL time-series data over customizable timeframes (7d, 14d, 30d) for p90, p95, and p99 percentiles, with fallback to Kubernetes Metrics Server (`metrics.k8s.io`).
 - **Cloud cost calculation engine**: Ships with pricing catalogs for AWS EKS, GCP GKE, Azure AKS, and bare-metal infrastructure, tracking per-vCPU and per-gigabyte hourly rates.
+- **Karpenter & Cluster Autoscaler bin-packing**: Simulates multi-dimensional First-Fit Decreasing (FFD) node scheduling to compute physical worker node reduction, removable node counts, and net infrastructure bill savings.
+- **HPA conflict protection**: Detects when scaling down CPU requests alters absolute autoscaling thresholds, preventing flapping autoscaler loops by computing recalculated target utilization percentages.
+- **Spot instance arbitrage**: Evaluates PodDisruptionBudgets, replica counts, and workload types to score disruption tolerance and highlight additional Spot savings opportunities.
+- **Interactive What-If simulation**: Browser-based FinOps Web Studio provides live CPU/memory headroom sliders and quantile selectors for instant scenario modeling.
 - **Safety headroom heuristics**: Configurable profiles (`conservative`, `balanced`, `aggressive`) add safety buffers to prevent OOMKills and throttling while lowering idle capacity.
 - **OOMKill mitigation guard**: Detects historical container crash events and automatically applies elevated memory safety floors.
 - **Actionable GitOps patches**: Emits ready-to-commit unified diffs for Kubernetes Deployment and StatefulSet manifests, in-place Helm `values.yaml` patches, and Kustomize overlays.
-- **Dual visual interfaces**: Includes an interactive terminal user interface (Textual TUI) and a browser-based FinOps Web Studio (FastAPI).
-- **Automated CI budget gates**: Enforces maximum allowable waste thresholds in pull requests with exit code signaling.
+- **Automated CI budget gates**: Enforces maximum allowable waste thresholds in pull requests with exit code signaling (`kubetrim gate`) and generates GitHub PR markdown tables.
+- **Automated GitOps branch exporter**: Creates dedicated Git branches with formatted commits ready for Pull Request creation (`kubetrim gitops-export`).
+- **Multi-cluster context switching**: Seamlessly switches between clusters registered in kubeconfig via `--context` or `kubetrim contexts`.
 
 ---
 
@@ -65,7 +70,7 @@ KubeTrim runs locally or in CI pipelines without installing cluster agents. It r
 |    Kubernetes Client Engine     |               |    Metrics Ingestion Layer     |
 |  * Read-only kubeconfig context |               |  * Prometheus PromQL Evaluator |
 |  * Deployments, StatefulSets    |               |  * Metrics Server API fallback |
-|  * Configured requests & limits |               |  * OOMKill historical detector |
+|  * HPA, PDB & Node discovery    |               |  * OOMKill historical detector |
 +----------------+----------------+               +----------------+---------------+
                  |                                                 |
                  +------------------------+------------------------+
@@ -73,8 +78,10 @@ KubeTrim runs locally or in CI pipelines without installing cluster agents. It r
                         +-----------------v-----------------+
                         |     FinOps Calculation Engine     |
                         |  * Cloud rate cards (AWS/GCP/AKS) |
-                        |  * Configurable safety buffers    |
-                        |  * Dollar savings and run-rate    |
+                        |  * Headroom buffer heuristics     |
+                        |  * HPA conflict recalculator      |
+                        |  * Spot disruption analyzer       |
+                        |  * Karpenter bin-pack simulator   |
                         +-----------------+-----------------+
                                           |
                         +-----------------v-----------------+
@@ -82,6 +89,8 @@ KubeTrim runs locally or in CI pipelines without installing cluster agents. It r
                         |  * Unified YAML git diffs         |
                         |  * Helm values.yaml updates       |
                         |  * Kustomize resource patches     |
+                        |  * GitOps PR branch commits       |
+                        |  * CI/CD budget gatekeeper        |
                         |  * JSON, CSV, and HTML reports    |
                         +-----------------------------------+
 ```
@@ -118,29 +127,53 @@ Scan all workloads in the default namespace using AWS us-east-1 pricing and the 
 kubetrim scan --namespace default --provider aws
 ```
 
-### 2. Generate unified YAML diffs
+### 2. Simulate Karpenter / Autoscaler node bin-packing
+
+Calculate physical worker node reduction and direct cloud bill savings:
+
+```bash
+kubetrim binpack --provider aws --instance-type m6i.xlarge
+```
+
+### 3. Enforce CI/CD FinOps budget gates
+
+Fail pull requests if newly committed manifests exceed allowable over-provisioning thresholds:
+
+```bash
+kubetrim gate --manifest ./manifests/deployment.yaml --max-waste-usd 50 --fail-on-waste --pr-comment-file comment.md
+```
+
+### 4. Export automated GitOps patch branch
+
+Create a new Git branch with the rightsized resource specifications committed:
+
+```bash
+kubetrim gitops-export ./manifests/deployment.yaml --branch finops/rightsize-checkout
+```
+
+### 5. Generate unified YAML diffs
 
 Generate patch diffs for local deployment manifests:
 
 ```bash
-kubetrim diff --manifest ./manifests/deployment.yaml
+kubetrim diff ./manifests/deployment.yaml
 ```
 
-### 3. Patch Helm values.yaml in-place
+### 6. Patch Helm values.yaml in-place
 
 Update `resources` blocks in a Helm chart values file with rightsized recommendations:
 
 ```bash
-kubetrim patch --helm-values ./charts/my-app/values.yaml --write
+kubetrim patch ./charts/my-app/values.yaml --write
 ```
 
-### 4. Launch the Interactive Textual TUI
+### 7. Launch the Interactive Textual TUI
 
 ```bash
 kubetrim tui
 ```
 
-### 5. Launch the Web Studio Dashboard
+### 8. Launch the Web Studio Dashboard
 
 ```bash
 kubetrim web --port 8980
@@ -160,7 +193,7 @@ KubeTrim provides pre-configured profiles under `configs/profiles/`:
 | `balanced` | p95 | +20% | +20% | General production applications |
 | `aggressive` | p90 | +10% | +10% | Development, staging, and batch jobs |
 
-You can also pass custom parameters:
+You can also pass custom parameters or use the interactive sliders in Web Studio:
 
 ```bash
 kubetrim scan --buffer-cpu 0.25 --buffer-memory 0.30 --min-cpu 0.05

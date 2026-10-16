@@ -7,6 +7,7 @@ from kubetrim.core.models import (
     ContainerResources,
     ContainerSpec,
     ContainerUsageMetrics,
+    HPAConfig,
     MetricPercentiles,
     ResourceLimits,
     ResourceRequests,
@@ -139,3 +140,85 @@ def test_advisor_min_floors():
     # Should enforce min_cpu_cores (0.02 -> 20m) and min_memory_mb (32Mi)
     assert c_rec.recommended_request_cpu == "20m"
     assert c_rec.recommended_request_memory == "32Mi"
+
+
+def test_advisor_hpa_conflict_guard():
+    profile = load_profile("balanced")
+    pricing = load_pricing_model("aws")
+    advisor = RightsizingAdvisor(profile, pricing)
+
+    # Workload with active HPA targeting 80% of 1000m CPU (800m trigger)
+    workload = WorkloadSpec(
+        namespace="prod",
+        name="web-frontend",
+        kind=WorkloadKind.DEPLOYMENT,
+        replicas=3,
+        containers=[
+            ContainerSpec(
+                name="web",
+                resources=ContainerResources(
+                    requests=ResourceRequests(cpu="1000m", memory="2Gi"),
+                    limits=ResourceLimits(cpu="2000m", memory="4Gi"),
+                ),
+            )
+        ],
+        hpa=HPAConfig(
+            target_cpu_utilization_pct=80,
+            min_replicas=2,
+            max_replicas=10,
+        ),
+    )
+
+    metrics = WorkloadMetrics(
+        namespace="prod",
+        workload_name="web-frontend",
+        containers=[
+            ContainerUsageMetrics(
+                container_name="web",
+                cpu=MetricPercentiles(p95=0.20, max_peak=0.35),
+                memory_mb=MetricPercentiles(p95=500.0, max_peak=700.0),
+            )
+        ],
+    )
+
+    rec = advisor.advise_workload(workload, metrics)
+    assert rec.hpa_warning is not None
+    assert rec.hpa_warning.has_hpa is True
+    assert rec.hpa_warning.original_target_pct == 80
+    assert rec.hpa_warning.original_trigger_cpu_cores == 0.8
+    # Recommended CPU request is 240m (0.24 cores)
+    assert rec.hpa_warning.rightsized_trigger_cpu_cores > 0
+    assert "HPA Conflict" in rec.hpa_warning.warning_message
+    assert rec.hpa_warning.suggested_target_pct == 95
+
+
+def test_advisor_spot_recommendation():
+    profile = load_profile("balanced")
+    pricing = load_pricing_model("aws")
+    advisor = RightsizingAdvisor(profile, pricing)
+
+    # Stateless deployment with PDB and 4 replicas
+    workload = WorkloadSpec(
+        namespace="prod",
+        name="stateless-api",
+        kind=WorkloadKind.DEPLOYMENT,
+        replicas=4,
+        has_pdb=True,
+        containers=[
+            ContainerSpec(
+                name="api",
+                resources=ContainerResources(
+                    requests=ResourceRequests(cpu="500m", memory="1Gi"),
+                    limits=ResourceLimits(cpu="1000m", memory="2Gi"),
+                ),
+            )
+        ],
+    )
+
+    rec = advisor.advise_workload(workload, metrics=None)
+    assert rec.spot_recommendation is not None
+    assert rec.spot_recommendation.eligible_for_spot is True
+    assert rec.spot_recommendation.has_pdb is True
+    assert rec.spot_recommendation.disruption_tolerance_score >= 70
+    assert rec.spot_recommendation.additional_spot_savings > 0
+

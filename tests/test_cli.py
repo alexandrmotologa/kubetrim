@@ -82,3 +82,51 @@ def test_cli_patch_dry_run():
     assert result.exit_code == 0
     assert "--- a/values.yaml" in result.output
     assert "Dry run complete" in result.output
+
+
+def test_cli_gate_pass():
+    result = runner.invoke(app, ["gate", "--max-waste-usd", "50000", "--max-waste-pct", "99"])
+    assert result.exit_code == 0
+    assert "PASSED" in result.output
+
+
+def test_cli_gate_fail(tmp_path):
+    pr_comment = tmp_path / "pr_comment.md"
+    result = runner.invoke(
+        app,
+        [
+            "gate",
+            "--max-waste-usd",
+            "10",
+            "--fail-on-waste",
+            "--pr-comment-file",
+            str(pr_comment),
+        ],
+    )
+    assert result.exit_code == 1
+    assert "FAILED" in result.output
+    assert pr_comment.exists()
+    assert "KubeTrim FinOps Budget Gate" in pr_comment.read_text(encoding="utf-8")
+
+
+def test_cli_binpack():
+    result = runner.invoke(app, ["binpack"])
+    assert result.exit_code == 0
+    assert "Node Bin-Packing" in result.output
+    assert "Current Nodes Needed" in result.output
+    assert "Simulated Node Allocation" in result.output
+
+
+def test_cli_gitops_export_dry_run():
+    manifest_path = Path("examples/manifests/deployment.yaml")
+    result = runner.invoke(app, ["gitops-export", str(manifest_path), "--dry-run"])
+    assert result.exit_code == 0
+    assert "GitOps Export Target" in result.output
+    assert "Dry run complete" in result.output
+
+
+def test_cli_contexts():
+    result = runner.invoke(app, ["contexts"])
+    # Contexts list command exits 0 whether local contexts exist or not
+    assert result.exit_code == 0
+

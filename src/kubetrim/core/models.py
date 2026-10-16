@@ -1,4 +1,4 @@
-"""Core data models and resource quantity parsers for KubeTrim."""
+"""Core data models, resource quantity parsers, HPA, Spot, and Bin-Packing schemas for KubeTrim."""
 
 from __future__ import annotations
 
@@ -21,14 +21,7 @@ class ResourceQuantity:
 
     @staticmethod
     def parse_cpu(val: Any) -> float:
-        """Parses Kubernetes CPU quantity to float cores.
-        
-        Examples:
-            '500m' -> 0.5
-            '2' -> 2.0
-            '0.25' -> 0.25
-            '1000m' -> 1.0
-        """
+        """Parses Kubernetes CPU quantity to float cores."""
         if val is None:
             return 0.0
         if isinstance(val, (int, float)):
@@ -58,10 +51,7 @@ class ResourceQuantity:
 
     @staticmethod
     def parse_memory_bytes(val: Any) -> int:
-        """Parses Kubernetes memory quantity string to raw bytes.
-        
-        Supports binary (Ki, Mi, Gi, Ti, Pi) and decimal (k, M, G, T, P) suffixes.
-        """
+        """Parses Kubernetes memory quantity string to raw bytes."""
         if val is None:
             return 0
         if isinstance(val, (int, float)):
@@ -81,7 +71,7 @@ class ResourceQuantity:
             "G": 1000**3,
             "T": 1000**4,
             "P": 1000**5,
-            "m": 1,  # fractional bytes treated as 1
+            "m": 1,
         }
 
         match = re.match(r"^([0-9.]+)\s*([A-Za-z]+)?$", val_str)
@@ -100,7 +90,7 @@ class ResourceQuantity:
 
     @staticmethod
     def parse_memory_mb(val: Any) -> float:
-        """Parses Kubernetes memory quantity to Megabytes (MB, where 1 MB = 1024*1024 bytes)."""
+        """Parses Kubernetes memory quantity to Megabytes (MB, 1 MB = 1024*1024 bytes)."""
         bytes_val = ResourceQuantity.parse_memory_bytes(val)
         return bytes_val / (1024.0 * 1024.0)
 
@@ -154,6 +144,14 @@ class ContainerSpec(BaseModel):
     resources: ContainerResources = Field(default_factory=ContainerResources)
 
 
+class HPAConfig(BaseModel):
+    min_replicas: int = 1
+    max_replicas: int = 10
+    current_replicas: int = 1
+    target_cpu_utilization_pct: Optional[int] = None
+    target_memory_utilization_pct: Optional[int] = None
+
+
 class WorkloadSpec(BaseModel):
     namespace: str
     name: str
@@ -162,6 +160,8 @@ class WorkloadSpec(BaseModel):
     containers: List[ContainerSpec] = Field(default_factory=list)
     labels: Dict[str, str] = Field(default_factory=dict)
     manifest_path: Optional[str] = None
+    hpa: Optional[HPAConfig] = None
+    has_pdb: bool = False
 
 
 class MetricPercentiles(BaseModel):
@@ -176,8 +176,8 @@ class MetricPercentiles(BaseModel):
 
 class ContainerUsageMetrics(BaseModel):
     container_name: str
-    cpu: MetricPercentiles = Field(default_factory=MetricPercentiles)  # Cores
-    memory_mb: MetricPercentiles = Field(default_factory=MetricPercentiles)  # MB
+    cpu: MetricPercentiles = Field(default_factory=MetricPercentiles)
+    memory_mb: MetricPercentiles = Field(default_factory=MetricPercentiles)
     oomkill_count: int = 0
 
 
@@ -188,6 +188,25 @@ class WorkloadMetrics(BaseModel):
     containers: List[ContainerUsageMetrics] = Field(default_factory=list)
     evaluation_window: str = "14d"
     source: str = "prometheus"
+
+
+class HPAWarning(BaseModel):
+    has_hpa: bool = False
+    original_target_pct: Optional[int] = None
+    original_trigger_cpu_cores: float = 0.0
+    rightsized_trigger_cpu_cores: float = 0.0
+    suggested_target_pct: Optional[int] = None
+    warning_message: str = ""
+
+
+class SpotRecommendation(BaseModel):
+    eligible_for_spot: bool = False
+    has_pdb: bool = False
+    disruption_tolerance_score: int = 0  # 0 to 100
+    current_on_demand_monthly_cost: float = 0.0
+    potential_spot_monthly_cost: float = 0.0
+    additional_spot_savings: float = 0.0
+    reason: str = ""
 
 
 class ContainerRecommendation(BaseModel):
@@ -202,8 +221,8 @@ class ContainerRecommendation(BaseModel):
     recommended_limit_cpu: str
     recommended_limit_memory: str
 
-    delta_cpu_cores: float  # current - recommended (positive = saving)
-    delta_memory_mb: float  # current - recommended (positive = saving)
+    delta_cpu_cores: float
+    delta_memory_mb: float
 
     current_monthly_cost: float
     recommended_monthly_cost: float
@@ -229,6 +248,34 @@ class WorkloadRecommendation(BaseModel):
     oomkill_detected: bool = False
     manifest_path: Optional[str] = None
 
+    hpa_warning: Optional[HPAWarning] = None
+    spot_recommendation: Optional[SpotRecommendation] = None
+
+
+class NodeSpec(BaseModel):
+    name: str
+    instance_type: str = "m6i.xlarge"
+    allocatable_cpu_cores: float = 4.0
+    allocatable_memory_mb: float = 16384.0
+    zone: str = "us-east-1a"
+    is_spot: bool = False
+    hourly_cost: float = 0.192
+
+
+class BinPackingResult(BaseModel):
+    current_node_count: int = 0
+    rightsized_node_count: int = 0
+    removable_nodes_count: int = 0
+    current_monthly_node_spend: float = 0.0
+    rightsized_monthly_node_spend: float = 0.0
+    net_node_monthly_savings: float = 0.0
+    annual_node_savings: float = 0.0
+    cpu_utilization_before_pct: float = 0.0
+    cpu_utilization_after_pct: float = 0.0
+    memory_utilization_before_pct: float = 0.0
+    memory_utilization_after_pct: float = 0.0
+    nodes_summary: List[Dict[str, Any]] = Field(default_factory=list)
+
 
 class ClusterSummary(BaseModel):
     total_workloads: int = 0
@@ -244,3 +291,6 @@ class ClusterSummary(BaseModel):
     region: str = "us-east-1"
     profile_name: str = "balanced"
     recommendations: List[WorkloadRecommendation] = Field(default_factory=list)
+
+    bin_packing: Optional[BinPackingResult] = None
+    total_spot_potential_savings: float = 0.0

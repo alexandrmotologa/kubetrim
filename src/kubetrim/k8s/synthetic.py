@@ -7,6 +7,7 @@ from kubetrim.core.models import (
     ContainerResources,
     ContainerSpec,
     ContainerUsageMetrics,
+    HPAConfig,
     MetricPercentiles,
     ResourceLimits,
     ResourceRequests,
@@ -19,7 +20,7 @@ from kubetrim.core.models import (
 def get_synthetic_cluster() -> List[Tuple[WorkloadSpec, WorkloadMetrics]]:
     """Generates a realistic multi-namespace production cluster dataset with over-provisioned workloads."""
     data = [
-        # 1. Critical E-Commerce Service (Heavily over-provisioned)
+        # 1. Critical E-Commerce Service (Heavily over-provisioned, with HPA active)
         {
             "namespace": "production",
             "name": "checkout-service",
@@ -41,8 +42,10 @@ def get_synthetic_cluster() -> List[Tuple[WorkloadSpec, WorkloadMetrics]]:
             "p99_mem": 780.0,
             "peak_mem": 950.0,
             "oomkill": 0,
+            "hpa": HPAConfig(min_replicas=2, max_replicas=8, current_replicas=4, target_cpu_utilization_pct=80),
+            "has_pdb": True,
         },
-        # 2. Payment Gateway
+        # 2. Payment Gateway (Eligible for Spot Arbitrage, with PDB)
         {
             "namespace": "production",
             "name": "payment-gateway",
@@ -64,6 +67,8 @@ def get_synthetic_cluster() -> List[Tuple[WorkloadSpec, WorkloadMetrics]]:
             "p99_mem": 600.0,
             "peak_mem": 710.0,
             "oomkill": 0,
+            "hpa": None,
+            "has_pdb": True,
         },
         # 3. Search Indexer (With OOMKill history to test guard!)
         {
@@ -86,9 +91,11 @@ def get_synthetic_cluster() -> List[Tuple[WorkloadSpec, WorkloadMetrics]]:
             "p95_mem": 1850.0,
             "p99_mem": 2400.0,
             "peak_mem": 3200.0,
-            "oomkill": 2,  # 2 historical OOMKills!
+            "oomkill": 2,
+            "hpa": None,
+            "has_pdb": False,
         },
-        # 4. User Authentication Service in Staging
+        # 4. User Authentication Service in Staging (Spot Eligible)
         {
             "namespace": "staging",
             "name": "auth-service",
@@ -110,6 +117,8 @@ def get_synthetic_cluster() -> List[Tuple[WorkloadSpec, WorkloadMetrics]]:
             "p99_mem": 250.0,
             "peak_mem": 300.0,
             "oomkill": 0,
+            "hpa": None,
+            "has_pdb": True,
         },
         # 5. Notification Worker in Staging
         {
@@ -133,6 +142,8 @@ def get_synthetic_cluster() -> List[Tuple[WorkloadSpec, WorkloadMetrics]]:
             "p99_mem": 180.0,
             "peak_mem": 220.0,
             "oomkill": 0,
+            "hpa": None,
+            "has_pdb": False,
         },
         # 6. Analytics Heavy Batch Engine
         {
@@ -156,6 +167,8 @@ def get_synthetic_cluster() -> List[Tuple[WorkloadSpec, WorkloadMetrics]]:
             "p99_mem": 8200.0,
             "peak_mem": 10500.0,
             "oomkill": 0,
+            "hpa": None,
+            "has_pdb": True,
         },
     ]
 
@@ -183,6 +196,8 @@ def get_synthetic_cluster() -> List[Tuple[WorkloadSpec, WorkloadMetrics]]:
                 )
             ],
             labels={"app": item["name"], "tier": item["namespace"]},
+            hpa=item.get("hpa"),
+            has_pdb=item.get("has_pdb", False),
         )
 
         metrics = WorkloadMetrics(

@@ -27,7 +27,7 @@ from kubetrim.patcher.yaml_diff import generate_kubectl_patch_command, generate_
 
 
 class DiffModal(ModalScreen):
-    """Modal dialog displaying unified YAML diff and patch commands."""
+    """Modal dialog displaying unified YAML diff, patch commands, and FinOps advice."""
 
     def __init__(self, workload_rec: WorkloadRecommendation):
         super().__init__()
@@ -36,14 +36,23 @@ class DiffModal(ModalScreen):
     def compose(self) -> ComposeResult:
         with Vertical(id="modal-dialog"):
             yield Label(
-                f"Patch Inspector: {self.rec.namespace}/{self.rec.workload_name}",
+                f"Patch & FinOps Inspector: {self.rec.namespace}/{self.rec.workload_name}",
                 id="modal-title",
             )
             kustomize_text = generate_kustomize_patch(self.rec)
             kubectl_text = generate_kubectl_patch_command(self.rec)
 
+            finops_notes = []
+            if self.rec.hpa_warning:
+                finops_notes.append(f"# [HPA Conflict Guard] {self.rec.hpa_warning.warning_message}")
+                finops_notes.append(f"# Recommended HPA Target: {self.rec.hpa_warning.suggested_target_pct}%")
+            if self.rec.spot_recommendation:
+                finops_notes.append(f"# [Spot Arbitrage] Score {self.rec.spot_recommendation.disruption_tolerance_score}/100: {self.rec.spot_recommendation.reason}")
+
+            header_str = ("\n".join(finops_notes) + "\n\n") if finops_notes else ""
             details = (
-                f"# Strategic Merge Patch (Kustomize / GitOps):\n{kustomize_text}\n"
+                f"{header_str}"
+                f"# Strategic Merge Patch (Kustomize / GitOps):\n{kustomize_text}\n\n"
                 f"# Kubectl Direct Command:\n{kubectl_text}\n"
             )
             yield Static(Syntax(details, "yaml", theme="monokai", line_numbers=True), id="modal-content")
@@ -211,6 +220,9 @@ class KubeTrimTUI(App):
                 yield Label("MONTHLY RECOVERABLE", classes="kpi-title")
                 yield Label("$0.00", id="kpi-savings", classes="kpi-val")
             with Vertical(classes="kpi-box"):
+                yield Label("NODE BIN-PACK", classes="kpi-title")
+                yield Label("0 Nodes", id="kpi-binpack", classes="kpi-val")
+            with Vertical(classes="kpi-box"):
                 yield Label("ANNUAL RUN-RATE", classes="kpi-title")
                 yield Label("$0.00 / yr", id="kpi-annual", classes="kpi-val")
             with Vertical(classes="kpi-box"):
@@ -243,10 +255,10 @@ class KubeTrimTUI(App):
             "Container",
             "Current Req",
             "Recommended Req",
-            "Current $/mo",
-            "Rec $/mo",
             "Savings $/mo",
             "Savings %",
+            "HPA Guard",
+            "Spot",
             "Flags",
         )
         self.load_data()
@@ -284,12 +296,21 @@ class KubeTrimTUI(App):
         self.query_one("#kpi-annual", Label).update(f"${self.summary.annual_savings:,.2f} / yr")
         self.query_one("#kpi-profile", Label).update(self.profile.name.upper())
 
+        if self.summary.bin_packing:
+            bp = self.summary.bin_packing
+            self.query_one("#kpi-binpack", Label).update(f"{bp.removable_nodes_count} Drained")
+        else:
+            self.query_one("#kpi-binpack", Label).update("0 Drained")
+
         table = self.query_one(DataTable)
         table.clear()
 
         for w in self.recommendations:
             if self.active_namespace_filter != "all" and w.namespace != self.active_namespace_filter:
                 continue
+
+            hpa_status = f"Target {w.hpa_warning.suggested_target_pct}%" if w.hpa_warning else "No HPA"
+            spot_status = "Spot Safe" if (w.spot_recommendation and w.spot_recommendation.eligible_for_spot) else "On-Demand"
 
             for c in w.containers:
                 flags = "OOMKill Guard" if c.oomkill_detected else "Normal"
@@ -301,10 +322,10 @@ class KubeTrimTUI(App):
                     c.container_name,
                     f"{c.current_request_cpu} / {c.current_request_memory}",
                     f"{c.recommended_request_cpu} / {c.recommended_request_memory}",
-                    f"${c.current_monthly_cost:.2f}",
-                    f"${c.recommended_monthly_cost:.2f}",
                     f"${c.monthly_savings:.2f}",
                     f"{c.savings_pct:.1f}%",
+                    hpa_status,
+                    spot_status,
                     flags,
                     key=f"{w.namespace}/{w.workload_name}/{c.container_name}",
                 )

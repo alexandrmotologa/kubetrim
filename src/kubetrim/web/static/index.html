@@ -22,7 +22,11 @@
       --emerald: #10b981;
       --emerald-glow: rgba(16, 185, 129, 0.15);
       --amber: #f59e0b;
+      --amber-glow: rgba(245, 158, 11, 0.15);
       --rose: #ef4444;
+      --rose-glow: rgba(239, 68, 68, 0.15);
+      --purple: #8b5cf6;
+      --purple-glow: rgba(139, 92, 246, 0.15);
       --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
       --mono: 'JetBrains Mono', monospace;
     }
@@ -48,7 +52,7 @@
       z-index: 40;
     }
     .nav-container {
-      max-width: 1400px;
+      max-width: 1480px;
       margin: 0 auto;
       display: flex;
       justify-content: space-between;
@@ -93,7 +97,8 @@
     .nav-controls {
       display: flex;
       align-items: center;
-      gap: 0.85rem;
+      gap: 0.75rem;
+      flex-wrap: wrap;
     }
     .select-input, .btn {
       background: #1f2937;
@@ -123,17 +128,120 @@
 
     /* Main Container */
     main {
-      max-width: 1400px;
+      max-width: 1480px;
       margin: 0 auto;
-      padding: 2rem;
+      padding: 1.75rem 2rem;
       width: 100%;
       flex: 1;
+    }
+
+    /* What-If Headroom Sandbox Panel */
+    .what-if-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.75rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    .what-if-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .what-if-title-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .what-if-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .badge-sandbox {
+      background: var(--purple-glow);
+      color: var(--purple);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      padding: 0.15rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+    .what-if-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      align-items: center;
+    }
+    .slider-box {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .slider-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+    .slider-val {
+      font-family: var(--mono);
+      font-weight: 600;
+      color: var(--accent);
+    }
+    .range-input {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      background: #1f2937;
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+    }
+    .range-input::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+    }
+    .quantiles-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .quantile-pill {
+      background: #1f2937;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 0.35rem 0.85rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .quantile-pill.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
     }
 
     /* KPI Grid */
     .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: 1.25rem;
       margin-bottom: 2rem;
     }
@@ -144,6 +252,9 @@
       padding: 1.25rem 1.5rem;
       position: relative;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
     }
     .kpi-card::before {
       content: '';
@@ -154,6 +265,7 @@
     }
     .kpi-card.green::before { background: var(--emerald); }
     .kpi-card.blue::before { background: var(--accent); }
+    .kpi-card.purple::before { background: var(--purple); }
     .kpi-card.amber::before { background: var(--amber); }
 
     .kpi-header {
@@ -163,7 +275,7 @@
       margin-bottom: 0.5rem;
     }
     .kpi-title {
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       font-weight: 600;
       color: var(--text-muted);
       text-transform: uppercase;
@@ -177,14 +289,16 @@
     }
     .kpi-pill.green { background: var(--emerald-glow); color: var(--emerald); }
     .kpi-pill.blue { background: var(--accent-glow); color: var(--accent); }
+    .kpi-pill.purple { background: var(--purple-glow); color: var(--purple); }
 
     .kpi-val {
-      font-size: 1.85rem;
+      font-size: 1.75rem;
       font-weight: 700;
       letter-spacing: -0.02em;
     }
     .kpi-val.green { color: var(--emerald); }
     .kpi-val.blue { color: var(--accent); }
+    .kpi-val.purple { color: var(--purple); }
     .kpi-desc {
       font-size: 0.8rem;
       color: var(--text-subtle);
@@ -237,23 +351,17 @@
       overflow: hidden;
       display: flex;
     }
-    .bar-fill-current {
-      background: #4b5563;
-      height: 100%;
-      border-radius: 9999px;
-      transition: width 0.5s ease;
-    }
     .bar-fill-rec {
       background: var(--accent);
       height: 100%;
       border-radius: 9999px;
-      transition: width 0.5s ease;
+      transition: width 0.4s ease;
     }
     .bar-fill-save {
       background: var(--emerald);
       height: 100%;
       border-radius: 9999px;
-      transition: width 0.5s ease;
+      transition: width 0.4s ease;
     }
 
     /* Controls Bar */
@@ -345,26 +453,34 @@
     .text-emerald { color: var(--emerald); font-weight: 600; }
     .text-accent { color: var(--accent); }
     .tag {
-      display: inline-block;
-      padding: 0.15rem 0.5rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.5rem;
       border-radius: 4px;
       font-size: 0.72rem;
       font-weight: 600;
+      white-space: nowrap;
+      margin: 0.15rem 0.2rem 0.15rem 0;
     }
     .tag-neutral { background: rgba(255, 255, 255, 0.08); color: var(--text); }
-    .tag-danger { background: rgba(239, 68, 68, 0.15); color: var(--rose); border: 1px solid rgba(239, 68, 68, 0.3); }
+    .tag-danger { background: var(--rose-glow); color: var(--rose); border: 1px solid rgba(239, 68, 68, 0.3); }
+    .tag-warning { background: var(--amber-glow); color: var(--amber); border: 1px solid rgba(245, 158, 11, 0.3); }
+    .tag-spot-good { background: var(--emerald-glow); color: var(--emerald); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .tag-spot-neutral { background: rgba(255, 255, 255, 0.05); color: var(--text-muted); border: 1px solid var(--border); }
 
     .action-btn {
       background: transparent;
       border: 1px solid var(--border);
       color: var(--accent);
-      padding: 0.25rem 0.6rem;
+      padding: 0.3rem 0.7rem;
       border-radius: 6px;
       font-size: 0.78rem;
       cursor: pointer;
       font-family: inherit;
       font-weight: 500;
       transition: all 0.15s ease;
+      white-space: nowrap;
     }
     .action-btn:hover {
       background: var(--accent);
@@ -387,8 +503,8 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 12px;
-      width: 750px;
-      max-width: 90vw;
+      width: 780px;
+      max-width: 92vw;
       max-height: 85vh;
       display: flex;
       flex-direction: column;
@@ -430,6 +546,26 @@
       max-height: 400px;
       overflow-y: auto;
     }
+    .finops-intel-card {
+      background: #090d16;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .intel-title {
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .intel-body {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
     .modal-footer {
       padding: 1rem 1.5rem;
       border-top: 1px solid var(--border);
@@ -464,13 +600,16 @@
         <div class="brand-text">KubeTrim <span class="badge-zero">Zero-Agent FinOps</span></div>
       </a>
       <div class="nav-controls">
+        <select id="select-context" class="select-input" onchange="switchContext()">
+          <option value="">Cluster: Default</option>
+        </select>
         <select id="select-provider" class="select-input" onchange="applyFilters()">
           <option value="aws">AWS EKS (us-east-1)</option>
           <option value="gcp">GCP GKE (us-central1)</option>
           <option value="azure">Azure AKS (eastus)</option>
           <option value="baremetal">Bare-Metal / On-Prem</option>
         </select>
-        <select id="select-profile" class="select-input" onchange="applyFilters()">
+        <select id="select-profile" class="select-input" onchange="onProfileDropdownChange()">
           <option value="conservative">Conservative (+40% p99)</option>
           <option value="balanced" selected>Balanced (+20% p95)</option>
           <option value="aggressive">Aggressive (+10% p90)</option>
@@ -482,11 +621,52 @@
   </header>
 
   <main>
+    <!-- Interactive What-If Headroom Sandbox -->
+    <div class="what-if-panel">
+      <div class="what-if-header">
+        <div class="what-if-title-group">
+          <div class="what-if-title">
+            <span>What-If Headroom Simulator</span>
+            <span class="badge-sandbox">Interactive Sandbox</span>
+          </div>
+          <span style="font-size: 0.8rem; color: var(--text-subtle);">Simulate safety margins and quantiles across all workloads in real time</span>
+        </div>
+        <button class="btn" style="font-size: 0.78rem; padding: 0.3rem 0.65rem;" onclick="resetWhatIf()">Reset Defaults</button>
+      </div>
+      <div class="what-if-grid">
+        <div class="slider-box">
+          <div class="slider-labels">
+            <span>CPU Safety Headroom</span>
+            <span class="slider-val" id="val-cpu">+20%</span>
+          </div>
+          <input type="range" min="0" max="100" step="5" value="20" class="range-input" id="slider-cpu" oninput="onWhatIfSliderInput('cpu', this.value)" onchange="applyWhatIf()" />
+        </div>
+        <div class="slider-box">
+          <div class="slider-labels">
+            <span>Memory Safety Headroom</span>
+            <span class="slider-val" id="val-mem">+20%</span>
+          </div>
+          <input type="range" min="0" max="100" step="5" value="20" class="range-input" id="slider-mem" oninput="onWhatIfSliderInput('mem', this.value)" onchange="applyWhatIf()" />
+        </div>
+        <div class="slider-box">
+          <div class="slider-labels">
+            <span>Target Quantile</span>
+            <span class="slider-val" id="val-quantile">p95</span>
+          </div>
+          <div class="quantiles-group">
+            <button class="quantile-pill" id="pill-p90" onclick="setQuantile(0.90, 'p90')">p90 (Aggressive)</button>
+            <button class="quantile-pill active" id="pill-p95" onclick="setQuantile(0.95, 'p95')">p95 (Balanced)</button>
+            <button class="quantile-pill" id="pill-p99" onclick="setQuantile(0.99, 'p99')">p99 (Conservative)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- KPI Summary Grid -->
     <div class="kpi-grid">
       <div class="kpi-card blue">
         <div class="kpi-header">
-          <span class="kpi-title">Current Spend</span>
+          <span class="kpi-title">Current Pod Spend</span>
           <span class="kpi-pill blue" id="kpi-workload-count">0 Workloads</span>
         </div>
         <div class="kpi-val blue" id="kpi-current">$0.00</div>
@@ -498,15 +678,23 @@
           <span class="kpi-pill blue" id="kpi-active-profile">BALANCED</span>
         </div>
         <div class="kpi-val" id="kpi-rightsized">$0.00</div>
-        <div class="kpi-desc">Calculated with safety buffer headroom</div>
+        <div class="kpi-desc">Calculated with headroom safety buffers</div>
       </div>
       <div class="kpi-card green">
         <div class="kpi-header">
-          <span class="kpi-title">Monthly Recoverable Waste</span>
+          <span class="kpi-title">Pod Recoverable Waste</span>
           <span class="kpi-pill green" id="kpi-savings-pct">0.0%</span>
         </div>
         <div class="kpi-val green" id="kpi-savings">$0.00</div>
-        <div class="kpi-desc">Immediate recurring cloud budget savings</div>
+        <div class="kpi-desc">Direct monthly over-provisioning reduction</div>
+      </div>
+      <div class="kpi-card purple">
+        <div class="kpi-header">
+          <span class="kpi-title">Node Bin-Packing</span>
+          <span class="kpi-pill purple" id="kpi-binpack-pill">Karpenter / CA</span>
+        </div>
+        <div class="kpi-val purple" id="kpi-binpack-nodes">0 Nodes</div>
+        <div class="kpi-desc" id="kpi-binpack-desc">Removable physical worker nodes</div>
       </div>
       <div class="kpi-card green">
         <div class="kpi-header">
@@ -531,12 +719,13 @@
       </div>
       <div class="chart-card">
         <div class="card-title">
-          <span>Cluster Efficiency</span>
-          <span style="font-size: 0.8rem; color: var(--text-muted);">Waste Ratio</span>
+          <span>Cluster Efficiency & Bin-Packing</span>
+          <button class="action-btn" style="font-size: 0.75rem;" onclick="openBinpackModal()">View Node Density</button>
         </div>
-        <div style="height: 180px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 0.75rem;">
+        <div style="height: 180px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 0.5rem;">
           <div style="font-size: 2.75rem; font-weight: 700; color: var(--emerald);" id="efficiency-metric">0%</div>
           <div style="font-size: 0.85rem; color: var(--text-muted); text-align: center;">Cluster Resource Over-Allocation</div>
+          <div style="font-size: 0.8rem; color: var(--accent); text-align: center;" id="binpack-quick-info">Calculating node consolidation...</div>
         </div>
       </div>
     </div>
@@ -567,7 +756,7 @@
             <th>Current $/mo</th>
             <th>Rec $/mo</th>
             <th>Monthly Savings</th>
-            <th>Flags</th>
+            <th>FinOps Intelligence & Flags</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -578,23 +767,60 @@
     </div>
   </main>
 
-  <!-- Patch Modal -->
+  <!-- Patch & FinOps Intelligence Modal -->
   <div class="modal-overlay" id="patch-modal">
     <div class="modal-box">
       <div class="modal-header">
-        <div class="modal-title" id="modal-workload-title">Patch Inspector</div>
+        <div class="modal-title" id="modal-workload-title">Patch & FinOps Details</div>
         <button class="action-btn" onclick="closeModal()">✕</button>
       </div>
       <div class="modal-body">
         <div class="modal-tabs">
           <button class="tab-pill active" id="tab-kustomize" onclick="switchModalTab('kustomize')">Kustomize Overlay</button>
           <button class="tab-pill" id="tab-kubectl" onclick="switchModalTab('kubectl')">Kubectl One-Liner</button>
+          <button class="tab-pill" id="tab-intel" onclick="switchModalTab('intel')">FinOps Intelligence</button>
         </div>
         <div class="code-preview" id="modal-code-content"></div>
+        <div id="modal-intel-content" style="display: none;"></div>
       </div>
       <div class="modal-footer">
-        <button class="btn" onclick="copyModalContent()">Copy to Clipboard</button>
+        <button class="btn" id="modal-copy-btn" onclick="copyModalContent()">Copy to Clipboard</button>
         <button class="btn btn-primary" onclick="closeModal()">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bin-Packing Simulation Modal -->
+  <div class="modal-overlay" id="binpack-modal">
+    <div class="modal-box" style="width: 860px;">
+      <div class="modal-header">
+        <div class="modal-title">Karpenter / Autoscaler Node Bin-Packing Simulation</div>
+        <button class="action-btn" onclick="closeBinpackModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="finops-intel-card" id="binpack-modal-kpis" style="margin-bottom: 1.25rem;">
+          <!-- Populated by JS -->
+        </div>
+        <div style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--text);">Simulated Worker Node Packing</div>
+        <div class="table-card">
+          <table>
+            <thead>
+              <tr>
+                <th>Node Index</th>
+                <th>Instance Type</th>
+                <th>CPU Density</th>
+                <th>Memory Density</th>
+                <th>Pods Scheduled</th>
+              </tr>
+            </thead>
+            <tbody id="binpack-tbody">
+              <!-- Populated by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="closeBinpackModal()">Close</button>
       </div>
     </div>
   </div>
@@ -606,16 +832,52 @@
     let activeNamespace = 'all';
     let currentModalData = null;
     let activeModalTab = 'kustomize';
+    let customCpuBuffer = 0.20;
+    let customMemoryBuffer = 0.20;
+    let customPercentile = 0.95;
+    let isCustomMode = false;
+
+    async function loadContexts() {
+      try {
+        const resp = await fetch('/api/contexts');
+        const data = await resp.json();
+        const select = document.getElementById('select-context');
+        if (data.contexts && data.contexts.length > 0) {
+          select.innerHTML = '';
+          data.contexts.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c;
+            opt.innerText = `Cluster: ${c}`;
+            if (c === data.active_context) opt.selected = true;
+            select.appendChild(opt);
+          });
+        }
+      } catch (err) {
+        console.warn('Could not load contexts:', err);
+      }
+    }
 
     async function fetchData() {
       const provider = document.getElementById('select-provider').value;
       const profile = document.getElementById('select-profile').value;
+      const context = document.getElementById('select-context').value || null;
+
+      const payload = {
+        provider,
+        profile,
+        namespace: null,
+        context,
+        evaluation_window: "14d",
+        custom_cpu_buffer: isCustomMode ? customCpuBuffer : null,
+        custom_memory_buffer: isCustomMode ? customMemoryBuffer : null,
+        custom_percentile: isCustomMode ? customPercentile : null
+      };
 
       try {
         const resp = await fetch('/api/scan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider, profile, namespace: null })
+          body: JSON.stringify(payload)
         });
         currentData = await resp.json();
         updateUI();
@@ -624,8 +886,83 @@
       }
     }
 
+    function switchContext() {
+      fetchData();
+    }
+
     function applyFilters() {
       fetchData();
+    }
+
+    function onProfileDropdownChange() {
+      const prof = document.getElementById('select-profile').value;
+      if (prof === 'conservative') {
+        customCpuBuffer = 0.40;
+        customMemoryBuffer = 0.40;
+        customPercentile = 0.99;
+      } else if (prof === 'aggressive') {
+        customCpuBuffer = 0.10;
+        customMemoryBuffer = 0.10;
+        customPercentile = 0.90;
+      } else {
+        customCpuBuffer = 0.20;
+        customMemoryBuffer = 0.20;
+        customPercentile = 0.95;
+      }
+      isCustomMode = false;
+      syncWhatIfControls();
+      fetchData();
+    }
+
+    function onWhatIfSliderInput(type, val) {
+      if (type === 'cpu') {
+        customCpuBuffer = parseInt(val) / 100.0;
+        document.getElementById('val-cpu').innerText = `+${val}%`;
+      } else if (type === 'mem') {
+        customMemoryBuffer = parseInt(val) / 100.0;
+        document.getElementById('val-mem').innerText = `+${val}%`;
+      }
+      isCustomMode = true;
+    }
+
+    function applyWhatIf() {
+      isCustomMode = true;
+      fetchData();
+    }
+
+    function setQuantile(p, label) {
+      customPercentile = p;
+      isCustomMode = true;
+      document.getElementById('val-quantile').innerText = label;
+      document.getElementById('pill-p90').classList.toggle('active', p === 0.90);
+      document.getElementById('pill-p95').classList.toggle('active', p === 0.95);
+      document.getElementById('pill-p99').classList.toggle('active', p === 0.99);
+      applyWhatIf();
+    }
+
+    function resetWhatIf() {
+      document.getElementById('select-profile').value = 'balanced';
+      customCpuBuffer = 0.20;
+      customMemoryBuffer = 0.20;
+      customPercentile = 0.95;
+      isCustomMode = false;
+      syncWhatIfControls();
+      fetchData();
+    }
+
+    function syncWhatIfControls() {
+      const cpuVal = Math.round(customCpuBuffer * 100);
+      const memVal = Math.round(customMemoryBuffer * 100);
+      document.getElementById('slider-cpu').value = cpuVal;
+      document.getElementById('slider-mem').value = memVal;
+      document.getElementById('val-cpu').innerText = `+${cpuVal}%`;
+      document.getElementById('val-mem').innerText = `+${memVal}%`;
+
+      const qLabel = customPercentile === 0.90 ? 'p90' : (customPercentile === 0.99 ? 'p99' : 'p95');
+      document.getElementById('val-quantile').innerText = qLabel;
+      document.getElementById('pill-p90').classList.toggle('active', customPercentile === 0.90);
+      document.getElementById('pill-p95').classList.toggle('active', customPercentile === 0.95);
+      document.getElementById('pill-p99').classList.toggle('active', customPercentile === 0.99);
     }
 
     function updateUI() {
@@ -640,6 +977,14 @@
       document.getElementById('kpi-replicas-count').innerText = `${currentData.total_replicas} total pod replicas evaluated`;
       document.getElementById('kpi-active-profile').innerText = currentData.profile_name.toUpperCase();
       document.getElementById('efficiency-metric').innerText = `${currentData.total_savings_pct}%`;
+
+      // Bin-packing KPI card
+      if (currentData.bin_packing) {
+        const bp = currentData.bin_packing;
+        document.getElementById('kpi-binpack-nodes').innerText = `${bp.removable_nodes_count} Nodes Drained`;
+        document.getElementById('kpi-binpack-desc').innerText = `+${bp.net_node_monthly_savings > 0 ? '$' + bp.net_node_monthly_savings.toFixed(2) : '$0.00'}/mo node reduction`;
+        document.getElementById('binpack-quick-info').innerText = `${bp.current_node_count} nodes -> ${bp.rightsized_node_count} nodes (+${bp.removable_nodes_count} freed)`;
+      }
 
       // Update Namespace Filter Pills
       const namespaces = Array.from(new Set(currentData.recommendations.map(w => w.namespace)));
@@ -671,7 +1016,7 @@
             </div>
             <div class="bar-track">
               <div class="bar-fill-rec" style="width: ${recWidth}%;"></div>
-              <div class="bar-fill-save" style="width: ${currWidth - recWidth}%;"></div>
+              <div class="bar-fill-save" style="width: ${Math.max(0, currWidth - recWidth)}%;"></div>
             </div>
           </div>
         `;
@@ -700,9 +1045,23 @@
       let html = '';
       filtered.forEach(w => {
         w.containers.forEach(c => {
-          const flagsHtml = c.oomkill_detected 
-            ? '<span class="tag tag-danger">OOMKill Guard (+40% RAM)</span>'
-            : '<span class="tag tag-neutral">Normal</span>';
+          let flagsHtml = '';
+          if (c.oomkill_detected) {
+            flagsHtml += '<span class="tag tag-danger">OOMKill Guard (+40% RAM)</span>';
+          }
+          if (w.hpa_warning) {
+            flagsHtml += `<span class="tag tag-warning" title="${w.hpa_warning.warning_message}">HPA Target: ${w.hpa_warning.suggested_target_pct}%</span>`;
+          }
+          if (w.spot_recommendation) {
+            if (w.spot_recommendation.eligible_for_spot) {
+              flagsHtml += `<span class="tag tag-spot-good" title="${w.spot_recommendation.reason}">Spot Safe (+${w.spot_recommendation.disruption_tolerance_score}%)</span>`;
+            } else {
+              flagsHtml += `<span class="tag tag-spot-neutral" title="${w.spot_recommendation.reason}">On-Demand Only</span>`;
+            }
+          }
+          if (!flagsHtml) {
+            flagsHtml = '<span class="tag tag-neutral">Normal</span>';
+          }
 
           html += `
             <tr>
@@ -716,7 +1075,7 @@
               <td class="text-emerald">+$${c.monthly_savings.toFixed(2)} (${c.savings_pct}%)</td>
               <td>${flagsHtml}</td>
               <td>
-                <button class="action-btn" onclick="openPatchModal('${w.namespace}', '${w.workload_name}')">Patch</button>
+                <button class="action-btn" onclick="openPatchModal('${w.namespace}', '${w.workload_name}')">Patch & FinOps</button>
               </td>
             </tr>
           `;
@@ -735,9 +1094,9 @@
       try {
         const resp = await fetch(`/api/patch/${ns}/${name}`);
         currentModalData = await resp.json();
-        document.getElementById('modal-workload-title').innerText = `Patch: ${ns}/${name}`;
+        document.getElementById('modal-workload-title').innerText = `Patch & FinOps: ${ns}/${name}`;
         activeModalTab = 'kustomize';
-        updateModalContent();
+        switchModalTab('kustomize');
         document.getElementById('patch-modal').classList.add('active');
       } catch (err) {
         console.error(err);
@@ -748,19 +1107,136 @@
       activeModalTab = tab;
       document.getElementById('tab-kustomize').classList.toggle('active', tab === 'kustomize');
       document.getElementById('tab-kubectl').classList.toggle('active', tab === 'kubectl');
-      updateModalContent();
+      document.getElementById('tab-intel').classList.toggle('active', tab === 'intel');
+
+      const codeBox = document.getElementById('modal-code-content');
+      const intelBox = document.getElementById('modal-intel-content');
+      const copyBtn = document.getElementById('modal-copy-btn');
+
+      if (tab === 'intel') {
+        codeBox.style.display = 'none';
+        intelBox.style.display = 'block';
+        copyBtn.style.display = 'none';
+        renderIntelContent();
+      } else {
+        codeBox.style.display = 'block';
+        intelBox.style.display = 'none';
+        copyBtn.style.display = 'inline-block';
+        const content = tab === 'kustomize' ? currentModalData.kustomize_patch : currentModalData.kubectl_command;
+        codeBox.innerText = content;
+      }
     }
 
-    function updateModalContent() {
+    function renderIntelContent() {
       if (!currentModalData) return;
-      const content = activeModalTab === 'kustomize' 
-        ? currentModalData.kustomize_patch 
-        : currentModalData.kubectl_command;
-      document.getElementById('modal-code-content').innerText = content;
+      const intelBox = document.getElementById('modal-intel-content');
+      let html = '';
+
+      // HPA Card
+      if (currentModalData.hpa_warning) {
+        const hpa = currentModalData.hpa_warning;
+        html += `
+          <div class="finops-intel-card">
+            <div class="intel-title" style="color: var(--amber);">
+              <span>⚠️ Horizontal Pod Autoscaler Conflict Guard</span>
+            </div>
+            <div class="intel-body">
+              <p><strong>Status:</strong> ${hpa.warning_message}</p>
+              <p style="margin-top: 0.5rem;">
+                Original HPA target: <strong>${hpa.original_target_pct}%</strong> (triggers at ${hpa.original_trigger_cpu_cores} cores)<br/>
+                Suggested target post-rightsizing: <strong style="color: var(--emerald);">${hpa.suggested_target_pct}%</strong>
+              </p>
+              <p style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-subtle);">
+                Reducing CPU requests lowers the absolute threshold where autoscaling begins. KubeTrim automatically recalculates the target percentage to maintain your desired absolute scale-out trigger point without triggering flapping loops.
+              </p>
+            </div>
+          </div>
+        `;
+      } else {
+        html += `
+          <div class="finops-intel-card">
+            <div class="intel-title" style="color: var(--emerald);">
+              <span>✓ Horizontal Pod Autoscaler Guard</span>
+            </div>
+            <div class="intel-body">
+              No active HPA detected targeting this workload. Rightsized CPU requests can be applied directly without autoscaler oscillation.
+            </div>
+          </div>
+        `;
+      }
+
+      // Spot Arbitrage Card
+      if (currentModalData.spot_recommendation) {
+        const spot = currentModalData.spot_recommendation;
+        const spotColor = spot.eligible_for_spot ? 'var(--emerald)' : 'var(--text-muted)';
+        const spotTitle = spot.eligible_for_spot ? '✓ Spot Instance Arbitrage Eligible' : 'ℹ️ On-Demand Workload Classification';
+
+        html += `
+          <div class="finops-intel-card">
+            <div class="intel-title" style="color: ${spotColor};">
+              <span>${spotTitle}</span>
+            </div>
+            <div class="intel-body">
+              <p><strong>Disruption Tolerance Score:</strong> ${spot.disruption_tolerance_score} / 100</p>
+              <p><strong>PDB Protection:</strong> ${spot.has_pdb ? 'Active PodDisruptionBudget detected' : 'No PDB configured'}</p>
+              <p><strong>Rationale:</strong> ${spot.reason}</p>
+              ${spot.additional_spot_savings > 0 ? `<p style="margin-top: 0.5rem; color: var(--emerald); font-weight: 600;">Additional Spot Savings Opportunity: +$${spot.additional_spot_savings.toFixed(2)}/mo</p>` : ''}
+            </div>
+          </div>
+        `;
+      }
+
+      intelBox.innerHTML = html;
     }
 
     function closeModal() {
       document.getElementById('patch-modal').classList.remove('active');
+    }
+
+    function openBinpackModal() {
+      if (!currentData || !currentData.bin_packing) return;
+      const bp = currentData.bin_packing;
+
+      document.getElementById('binpack-modal-kpis').innerHTML = `
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase;">Worker Nodes Needed</div>
+            <div style="font-size: 1.25rem; font-weight: 700; color: var(--accent);">${bp.current_node_count} &rarr; ${bp.rightsized_node_count} nodes</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase;">Removable Nodes</div>
+            <div style="font-size: 1.25rem; font-weight: 700; color: var(--emerald);">${bp.removable_nodes_count} freed</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase;">Node Spend Savings</div>
+            <div style="font-size: 1.25rem; font-weight: 700; color: var(--emerald);">+$${bp.net_node_monthly_savings.toFixed(2)}/mo</div>
+          </div>
+          <div>
+            <div style="color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase;">Cluster CPU Density</div>
+            <div style="font-size: 1.25rem; font-weight: 700;">${bp.cpu_utilization_before_pct}% &rarr; <span style="color: var(--emerald);">${bp.cpu_utilization_after_pct}%</span></div>
+          </div>
+        </div>
+      `;
+
+      const tbody = document.getElementById('binpack-tbody');
+      let html = '';
+      bp.nodes_summary.forEach(n => {
+        html += `
+          <tr>
+            <td><strong>worker-node-${n.node_index}</strong></td>
+            <td><span class="mono">${n.instance_type}</span></td>
+            <td><span class="mono text-accent">${n.cpu_utilization_pct}%</span></td>
+            <td><span class="mono text-accent">${n.mem_utilization_pct}%</span></td>
+            <td><strong>${n.pods_scheduled} pods</strong></td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = html;
+      document.getElementById('binpack-modal').classList.add('active');
+    }
+
+    function closeBinpackModal() {
+      document.getElementById('binpack-modal').classList.remove('active');
     }
 
     function copyModalContent() {
@@ -781,6 +1257,7 @@
     }
 
     // Initialize
+    loadContexts();
     fetchData();
   </script>
 </body>

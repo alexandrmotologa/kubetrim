@@ -1,8 +1,10 @@
-"""Command-line interface for KubeTrim FinOps rightsizing engine."""
+"""Command-line interface for KubeTrim FinOps rightsizing, HPA audit, bin-packing, and CI budget gate."""
 
 from __future__ import annotations
 
+import datetime
 import os
+import subprocess
 from pathlib import Path
 from typing import Optional
 import typer
@@ -13,6 +15,7 @@ from rich.table import Table
 
 from kubetrim import __version__
 from kubetrim.core.advisor import RightsizingAdvisor
+from kubetrim.core.binpack import NodeBinPackingSimulator
 from kubetrim.core.config import BUILTIN_PROFILES, load_profile
 from kubetrim.core.cost import BUILTIN_PRICING, load_pricing_model
 from kubetrim.core.models import (
@@ -23,6 +26,23 @@ from kubetrim.core.models import (
     WorkloadRecommendation,
     WorkloadSpec,
 )
+from kubetrim.k8s.client import KubernetesClient
+from kubetrim.k8s.prometheus import PrometheusClient
+from kubetrim.k8s.synthetic import get_synthetic_cluster
+from kubetrim.patcher.exporter import export_csv, export_html, export_json, export_markdown
+from kubetrim.patcher.helm_patch import apply_helm_file_patch
+from kubetrim.patcher.yaml_diff import (
+    generate_kubectl_patch_command,
+    generate_kustomize_patch,
+    patch_manifest_yaml,
+)
+
+app = typer.Typer(
+    name="kubetrim",
+    help="Zero-Agent Kubernetes FinOps & Pod Rightsizing Patch Generator",
+    no_args_is_help=True,
+)
+console = Console()
 
 
 def _find_or_estimate_metrics(
@@ -35,13 +55,11 @@ def _find_or_estimate_metrics(
         if m:
             return m
 
-    # Check synthetic cluster match by name
     synthetic = get_synthetic_cluster()
     for s_spec, s_metrics in synthetic:
         if s_spec.name.lower() == workload.name.lower() or workload.name.lower() in s_spec.name.lower():
             return s_metrics
 
-    # If no historical metrics found, estimate typical production p95 (at ~20% of requested CPU, ~25% of RAM)
     c_metrics_list = []
     for c in workload.containers:
         curr_cpu = c.resources.requests.cpu_cores
@@ -78,23 +96,6 @@ def _find_or_estimate_metrics(
         evaluation_window=window,
         source="estimated",
     )
-from kubetrim.k8s.client import KubernetesClient
-from kubetrim.k8s.prometheus import PrometheusClient
-from kubetrim.k8s.synthetic import get_synthetic_cluster
-from kubetrim.patcher.exporter import export_csv, export_html, export_json
-from kubetrim.patcher.helm_patch import apply_helm_file_patch
-from kubetrim.patcher.yaml_diff import (
-    generate_kubectl_patch_command,
-    generate_kustomize_patch,
-    patch_manifest_yaml,
-)
-
-app = typer.Typer(
-    name="kubetrim",
-    help="Zero-Agent Kubernetes FinOps & Pod Rightsizing Patch Generator",
-    no_args_is_help=True,
-)
-console = Console()
 
 
 def _get_cluster_recommendations(
@@ -104,13 +105,14 @@ def _get_cluster_recommendations(
     prometheus_url: Optional[str] = None,
     window: str = "14d",
     kubeconfig_path: Optional[str] = None,
+    context: Optional[str] = None,
 ) -> tuple[RightsizingAdvisor, list[WorkloadRecommendation], ClusterSummary]:
     pricing = load_pricing_model(provider)
     profile = load_profile(profile_name)
     advisor = RightsizingAdvisor(profile, pricing)
 
     recs: list[WorkloadRecommendation] = []
-    k8s = KubernetesClient(kubeconfig_path=kubeconfig_path)
+    k8s = KubernetesClient(kubeconfig_path=kubeconfig_path, context=context)
 
     prom_client = PrometheusClient(endpoint_url=prometheus_url) if prometheus_url else None
 
@@ -122,7 +124,6 @@ def _get_cluster_recommendations(
             recs.append(rec)
 
     if not recs:
-        # Fallback to authentic synthetic workload benchmark cluster
         cluster = get_synthetic_cluster()
         for w_spec, w_metrics in cluster:
             if namespace and w_spec.namespace != namespace:
@@ -140,6 +141,7 @@ def scan(
     provider: str = typer.Option("aws", "--provider", "-p", help="Cloud provider rate card (aws, gcp, azure, baremetal)"),
     profile: str = typer.Option("balanced", "--profile", help="Rightsizing profile (conservative, balanced, aggressive)"),
     prometheus_url: Optional[str] = typer.Option(None, "--prometheus-url", help="Prometheus endpoint for historical metrics"),
+    context: Optional[str] = typer.Option(None, "--context", "-c", help="Kubernetes kubeconfig context name"),
     window: str = typer.Option("14d", "--window", help="Historical evaluation window (e.g. 7d, 14d, 30d)"),
     output: str = typer.Option("table", "--output", "-o", help="Output format: table, json, csv, html"),
     export_file: Optional[Path] = typer.Option(None, "--export-file", help="Path to write exported report"),
@@ -152,6 +154,7 @@ def scan(
         namespace=namespace,
         prometheus_url=prometheus_url,
         window=window,
+        context=context,
     )
 
     filtered_recs = [r for r in recs if r.total_monthly_savings >= min_savings]
@@ -184,18 +187,17 @@ def scan(
             console.print(html_out)
         return
 
-    # Print Rich Table UI
     kpi_text = (
         f"[bold]Current Monthly Spend:[/bold] [cyan]${summary.total_current_monthly_cost:,.2f}[/cyan]    "
         f"[bold]Rightsized Spend:[/bold] [blue]${summary.total_recommended_monthly_cost:,.2f}[/blue]    "
         f"[bold]Monthly Recoverable Waste:[/bold] [bold green]+${summary.total_monthly_savings:,.2f} ({summary.total_savings_pct}%)[/bold green]\n"
         f"[bold]Projected Annual Savings:[/bold] [bold green]${summary.annual_savings:,.2f}[/bold green]    "
         f"[bold]Workloads Evaluated:[/bold] {summary.total_workloads} ({summary.total_replicas} pod replicas)    "
-        f"[bold]Profile:[/bold] {profile.upper()} ({provider.upper()})"
+        f"[bold]Spot Arbitrage Potential:[/bold] [bold green]+${summary.total_spot_potential_savings:,.2f}/mo[/bold green]"
     )
     console.print(Panel(kpi_text, title="[bold blue]KubeTrim FinOps Summary[/bold blue]", border_style="blue"))
 
-    table = Table(title="Workload Rightsizing Recommendations", show_header=True, header_style="bold magenta")
+    table = Table(title="Workload Rightsizing Recommendations", show_header=True, header_style="bold magenta", expand=True)
     table.add_column("Namespace", style="cyan")
     table.add_column("Workload", style="bold white")
     table.add_column("Kind/Reps", style="dim")
@@ -205,11 +207,20 @@ def scan(
     table.add_column("Current $/mo", justify="right")
     table.add_column("Rec $/mo", justify="right")
     table.add_column("Savings", justify="right", style="bold green")
-    table.add_column("Safety Flags", style="bold")
+    table.add_column("Safety & FinOps Flags", style="bold")
 
     for w in filtered_recs:
         for c in w.containers:
-            flags = "[red]OOMKill Guard (+40% RAM)[/red]" if c.oomkill_detected else "[green]Normal[/green]"
+            flags_list = []
+            if c.oomkill_detected:
+                flags_list.append("[red]OOMKill Guard (+40% RAM)[/red]")
+            if w.hpa_warning and w.hpa_warning.has_hpa:
+                flags_list.append(f"[yellow]HPA Target {w.hpa_warning.suggested_target_pct}%[/yellow]")
+            if w.spot_recommendation and w.spot_recommendation.eligible_for_spot:
+                flags_list.append(f"[cyan]Spot Ready (+${w.spot_recommendation.additional_spot_savings:.0f}/mo)[/cyan]")
+
+            flags = " | ".join(flags_list) if flags_list else "[green]Normal[/green]"
+
             table.add_row(
                 w.namespace,
                 w.workload_name,
@@ -228,6 +239,206 @@ def scan(
         html_out = export_html(summary)
         export_file.write_text(html_out, encoding="utf-8")
         console.print(f"\n[green]Audit report also exported to {export_file}[/green]")
+
+
+@app.command()
+def gate(
+    manifest: Optional[Path] = typer.Argument(None, help="Path to local Kubernetes manifest file or directory"),
+    max_waste_usd: float = typer.Option(50.0, "--max-waste-usd", help="Maximum allowable monthly dollar waste"),
+    max_waste_pct: float = typer.Option(25.0, "--max-waste-pct", help="Maximum allowable waste percentage"),
+    fail_on_waste: bool = typer.Option(True, "--fail-on-waste / --no-fail-on-waste", help="Exit code 1 if thresholds exceeded"),
+    pr_comment_file: Optional[Path] = typer.Option(None, "--pr-comment-file", help="Write formatted PR markdown comment to file"),
+    provider: str = typer.Option("aws", "--provider", "-p", help="Cloud provider rate card"),
+    profile: str = typer.Option("balanced", "--profile", help="Rightsizing profile"),
+):
+    """Enforces FinOps budget gates in CI pipelines, exiting with code 1 if waste thresholds are breached."""
+    pricing = load_pricing_model(provider)
+    rightsizer_profile = load_profile(profile)
+    advisor = RightsizingAdvisor(rightsizer_profile, pricing)
+
+    if manifest and manifest.exists():
+        workloads = (
+            KubernetesClient.scan_manifest_directory(str(manifest))
+            if manifest.is_dir()
+            else KubernetesClient.parse_manifest_file(str(manifest))
+        )
+        recs = []
+        for w in workloads:
+            m = _find_or_estimate_metrics(w)
+            recs.append(advisor.advise_workload(w, metrics=m))
+        summary = advisor.generate_cluster_summary(recs)
+    else:
+        _, recs, summary = _get_cluster_recommendations(provider=provider, profile_name=profile)
+
+    failed = False
+    reasons = []
+
+    if summary.total_monthly_savings > max_waste_usd:
+        failed = True
+        reasons.append(f"Monthly recoverable waste (${summary.total_monthly_savings:.2f}) exceeds threshold (${max_waste_usd:.2f})")
+
+    if summary.total_savings_pct > max_waste_pct:
+        failed = True
+        reasons.append(f"Waste percentage ({summary.total_savings_pct}%) exceeds allowable threshold ({max_waste_pct}%)")
+
+    status_str = "[bold red]FAILED[/bold red]" if failed else "[bold green]PASSED[/bold green]"
+    panel_text = (
+        f"[bold]FinOps Budget Gate Status:[/bold] {status_str}\n"
+        f"[bold]Total Evaluated Workloads:[/bold] {summary.total_workloads} ({summary.total_replicas} pod replicas)\n"
+        f"[bold]Monthly Recoverable Waste:[/bold] ${summary.total_monthly_savings:.2f} ({summary.total_savings_pct}%)\n"
+        f"[bold]Configured Thresholds:[/bold] Max ${max_waste_usd:.2f}/mo waste, Max {max_waste_pct}% reduction\n"
+    )
+    if reasons:
+        panel_text += "\n[bold red]Breaches Detected:[/bold red]\n" + "\n".join(f"  * {r}" for r in reasons)
+
+    console.print(Panel(panel_text, title="[bold]KubeTrim CI Budget Gatekeeper[/bold]", border_style="red" if failed else "green"))
+
+    if pr_comment_file:
+        md_table = export_markdown(summary)
+        badge = "FAILED" if failed else "PASSED"
+        pr_content = (
+            f"### KubeTrim FinOps Budget Gate: **{badge}**\n\n"
+            f"> Evaluated against profile `{profile}` on {provider.upper()}.\n\n"
+            f"- **Current Monthly Spend:** ${summary.total_current_monthly_cost:.2f}\n"
+            f"- **Rightsized Monthly Spend:** ${summary.total_recommended_monthly_cost:.2f}\n"
+            f"- **Potential Monthly Savings:** **${summary.total_monthly_savings:.2f}** ({summary.total_savings_pct}%)\n\n"
+            f"{md_table}"
+        )
+        pr_comment_file.write_text(pr_content, encoding="utf-8")
+        console.print(f"[green]GitHub PR comment written to {pr_comment_file}[/green]")
+
+    if failed and fail_on_waste:
+        console.print("[red]CI Budget Gate failed: excessive over-provisioning detected.[/red]")
+        raise typer.Exit(code=1)
+    else:
+        console.print("[green]CI Budget Gate succeeded: resource allocation within acceptable boundaries.[/green]")
+
+
+@app.command()
+def binpack(
+    provider: str = typer.Option("aws", "--provider", "-p", help="Cloud provider rate card"),
+    profile: str = typer.Option("balanced", "--profile", help="Rightsizing profile"),
+    instance_type: str = typer.Option("m6i.xlarge", "--instance-type", help="Default worker node instance type"),
+    namespace: Optional[str] = typer.Option(None, "--namespace", "-n", help="Namespace filter"),
+):
+    """Simulates Karpenter and Cluster Autoscaler node bin-packing to compute physical node savings."""
+    _, recs, summary = _get_cluster_recommendations(provider=provider, profile_name=profile, namespace=namespace)
+
+    bp = summary.bin_packing
+    if not bp:
+        console.print("[yellow]Bin packing simulation unavailable for the current cluster state.[/yellow]")
+        return
+
+    kpi_text = (
+        f"[bold]Current Nodes Needed:[/bold] [yellow]{bp.current_node_count}[/yellow]    "
+        f"[bold]Rightsized Nodes Needed:[/bold] [blue]{bp.rightsized_node_count}[/blue]    "
+        f"[bold]Nodes Removable / Drained:[/bold] [bold green]{bp.removable_nodes_count} worker nodes[/bold green]\n"
+        f"[bold]Current Node Infrastructure Spend:[/bold] ${bp.current_monthly_node_spend:,.2f}/mo\n"
+        f"[bold]Rightsized Node Infrastructure Spend:[/bold] ${bp.rightsized_monthly_node_spend:,.2f}/mo\n"
+        f"[bold]Direct Node Dollar Savings:[/bold] [bold green]+${bp.net_node_monthly_savings:,.2f}/mo (+${bp.annual_node_savings:,.2f} ARR)[/bold green]\n"
+        f"[bold]Cluster CPU Utilization:[/bold] {bp.cpu_utilization_before_pct}% -> [bold green]{bp.cpu_utilization_after_pct}%[/bold green]    "
+        f"[bold]Memory Utilization:[/bold] {bp.memory_utilization_before_pct}% -> [bold green]{bp.memory_utilization_after_pct}%[/bold green]"
+    )
+    console.print(Panel(kpi_text, title="[bold green]Node Bin-Packing & Autoscaler Simulation[/bold green]", border_style="green"))
+
+    table = Table(title="Simulated Node Allocation", show_header=True, header_style="bold cyan")
+    table.add_column("Node Index", style="bold")
+    table.add_column("Instance Type", style="white")
+    table.add_column("CPU Density", justify="right")
+    table.add_column("Memory Density", justify="right")
+    table.add_column("Pods Scheduled", justify="right")
+
+    for node in bp.nodes_summary:
+        table.add_row(
+            f"worker-node-{node['node_index']}",
+            node["instance_type"],
+            f"{node['cpu_utilization_pct']}%",
+            f"{node['mem_utilization_pct']}%",
+            str(node["pods_scheduled"]),
+        )
+
+    console.print(table)
+
+
+@app.command(name="gitops-export")
+def gitops_export(
+    path: Path = typer.Argument(..., help="Path to local Kubernetes manifest file or Helm values.yaml"),
+    branch: Optional[str] = typer.Option(None, "--branch", "-b", help="Git branch name to create"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview GitOps export without committing"),
+    provider: str = typer.Option("aws", "--provider", "-p", help="Cloud provider rate card"),
+    profile: str = typer.Option("balanced", "--profile", help="Rightsizing profile"),
+):
+    """Automatically creates a Git branch and commits rightsized YAML / Helm patches ready for Pull Request."""
+    if not path.is_file():
+        console.print(f"[red]Error: Target file '{path}' does not exist.[/red]")
+        raise typer.Exit(1)
+
+    pricing = load_pricing_model(provider)
+    rightsizer_profile = load_profile(profile)
+    advisor = RightsizingAdvisor(rightsizer_profile, pricing)
+
+    if "values" in path.name.lower():
+        cluster = get_synthetic_cluster()
+        first_spec, first_metrics = cluster[0]
+        rec = advisor.advise_workload(first_spec, first_metrics)
+        new_yaml, diff_str = apply_helm_file_patch(str(path), rec, write=not dry_run, backup=False)
+    else:
+        workloads = KubernetesClient.parse_manifest_file(str(path))
+        target_w = workloads[0] if workloads else get_synthetic_cluster()[0][0]
+        target_m = _find_or_estimate_metrics(target_w)
+        rec = advisor.advise_workload(target_w, metrics=target_m)
+        content = path.read_text(encoding="utf-8")
+        new_yaml, diff_str = patch_manifest_yaml(content, rec)
+        if not dry_run and new_yaml != content:
+            path.write_text(new_yaml, encoding="utf-8")
+
+    if not diff_str:
+        console.print("[green]Workload is already rightsized. No git commit required.[/green]")
+        return
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M")
+    branch_name = branch or f"finops/rightsize-{rec.workload_name}-{timestamp}"
+
+    console.print(f"[bold blue]GitOps Export Target:[/bold blue] Branch [cyan]{branch_name}[/cyan]")
+    console.print(Syntax(diff_str, "diff", theme="monokai", line_numbers=True))
+
+    if dry_run:
+        console.print("[dim]Dry run complete. Git branch and commit were not created.[/dim]")
+        return
+
+    try:
+        subprocess.run(["git", "checkout", "-b", branch_name], check=True, capture_output=True)
+        subprocess.run(["git", "add", str(path)], check=True, capture_output=True)
+        commit_msg = (
+            f"perf(finops): rightsize {rec.workload_name} resources\n\n"
+            f"Monthly dollar savings: +${rec.total_monthly_savings:.2f} ({rec.savings_pct}%)\n"
+            f"Current cost: ${rec.total_current_monthly_cost:.2f}/mo -> Rightsized: ${rec.total_recommended_monthly_cost:.2f}/mo\n\n"
+            f"Generated automatically by KubeTrim."
+        )
+        subprocess.run(["git", "commit", "-m", commit_msg], check=True, capture_output=True)
+        console.print(f"[bold green]Successfully committed patch to new branch '{branch_name}'![/bold green]")
+        console.print(f"[cyan]To publish pull request, run:[/cyan] git push origin {branch_name} && gh pr create")
+    except Exception as e:
+        console.print(f"[yellow]Notice: local git commit skipped or repository in detached state: {e}[/yellow]")
+
+
+@app.command()
+def contexts():
+    """Lists available Kubernetes cluster contexts from ~/.kube/config."""
+    k8s = KubernetesClient()
+    ctx_list = k8s.list_available_contexts()
+    if not ctx_list:
+        console.print("[yellow]No Kubernetes contexts discovered in ~/.kube/config[/yellow]")
+        return
+
+    table = Table(title="Available Kubernetes Contexts", show_header=True, header_style="bold cyan")
+    table.add_column("Index", style="dim")
+    table.add_column("Context Name", style="bold white")
+
+    for idx, c in enumerate(ctx_list, start=1):
+        table.add_row(str(idx), c)
+
+    console.print(table)
 
 
 @app.command()
@@ -342,11 +553,12 @@ def tui(
     provider: str = typer.Option("aws", "--provider", "-p", help="Cloud provider rate card"),
     profile: str = typer.Option("balanced", "--profile", help="Rightsizing profile"),
     namespace: Optional[str] = typer.Option(None, "--namespace", "-n", help="Initial namespace filter"),
+    context: Optional[str] = typer.Option(None, "--context", "-c", help="Initial kubeconfig context"),
 ):
     """Launches the interactive Textual terminal FinOps dashboard."""
     from kubetrim.tui.app import KubeTrimTUI
 
-    app_tui = KubeTrimTUI(provider=provider, profile_name=profile, namespace=namespace)
+    app_tui = KubeTrimTUI(provider=provider, profile_name=profile, namespace=namespace, context=context)
     app_tui.run()
 
 

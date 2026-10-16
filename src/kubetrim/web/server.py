@@ -1,4 +1,4 @@
-"""FastAPI server providing REST endpoints, WebSockets, and FinOps Web Studio UI."""
+"""FastAPI server providing REST endpoints, WebSockets, What-If simulator, and FinOps Web Studio UI."""
 
 from __future__ import annotations
 
@@ -12,9 +12,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from kubetrim.core.advisor import RightsizingAdvisor
+from kubetrim.core.binpack import NodeBinPackingSimulator
 from kubetrim.core.config import BUILTIN_PROFILES, RightsizingProfile, load_profile
 from kubetrim.core.cost import BUILTIN_PRICING, PricingModel, load_pricing_model
-from kubetrim.core.models import ClusterSummary, WorkloadRecommendation
+from kubetrim.core.models import BinPackingResult, ClusterSummary, WorkloadRecommendation
 from kubetrim.k8s.client import KubernetesClient
 from kubetrim.k8s.synthetic import get_synthetic_cluster
 from kubetrim.patcher.exporter import export_csv, export_html, export_json
@@ -26,7 +27,7 @@ from kubetrim.patcher.yaml_diff import (
 
 app = FastAPI(
     title="KubeTrim FinOps Web Studio",
-    description="Zero-Agent Kubernetes FinOps and Pod Rightsizing API and Web Dashboard",
+    description="Zero-Agent Kubernetes FinOps, Pod Rightsizing, HPA & Bin-Packing API",
     version="0.1.0",
 )
 
@@ -38,7 +39,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory session state for instant interactions
 STATIC_DIR = Path(__file__).parent / "static"
 
 
@@ -46,7 +46,11 @@ class ScanRequest(BaseModel):
     provider: str = "aws"
     profile: str = "balanced"
     namespace: Optional[str] = None
+    context: Optional[str] = None
     evaluation_window: str = "14d"
+    custom_cpu_buffer: Optional[float] = None
+    custom_memory_buffer: Optional[float] = None
+    custom_percentile: Optional[float] = None
 
 
 class WebStudioState:
@@ -54,6 +58,11 @@ class WebStudioState:
         self.provider = "aws"
         self.profile = "balanced"
         self.namespace = None
+        self.context = None
+        self.custom_cpu_buffer: Optional[float] = None
+        self.custom_memory_buffer: Optional[float] = None
+        self.custom_percentile: Optional[float] = None
+
         self.pricing = load_pricing_model("aws")
         self.rightsizer_profile = load_profile("balanced")
         self.summary: Optional[ClusterSummary] = None
@@ -62,18 +71,34 @@ class WebStudioState:
 
     def _refresh(self):
         self.pricing = load_pricing_model(self.provider)
-        self.rightsizer_profile = load_profile(self.profile)
+
+        if self.custom_cpu_buffer is not None or self.custom_memory_buffer is not None or self.custom_percentile is not None:
+            base = load_profile(self.profile)
+            self.rightsizer_profile = RightsizingProfile(
+                name="custom",
+                description="Interactive What-If Headroom Profile",
+                target_percentile=self.custom_percentile if self.custom_percentile is not None else base.target_percentile,
+                cpu_headroom_buffer=self.custom_cpu_buffer if self.custom_cpu_buffer is not None else base.cpu_headroom_buffer,
+                memory_headroom_buffer=self.custom_memory_buffer if self.custom_memory_buffer is not None else base.memory_headroom_buffer,
+                oomkill_extra_buffer=base.oomkill_extra_buffer,
+                min_cpu_cores=base.min_cpu_cores,
+                min_memory_mb=base.min_memory_mb,
+                limit_cpu_multiplier=base.limit_cpu_multiplier,
+                limit_memory_multiplier=base.limit_memory_multiplier,
+            )
+        else:
+            self.rightsizer_profile = load_profile(self.profile)
+
         advisor = RightsizingAdvisor(self.rightsizer_profile, self.pricing)
 
         recs: List[WorkloadRecommendation] = []
-        k8s = KubernetesClient()
+        k8s = KubernetesClient(context=self.context)
         if k8s.connect():
             workloads = k8s.discover_cluster_workloads(namespace=self.namespace)
             for w in workloads:
                 recs.append(advisor.advise_workload(w))
 
         if not recs:
-            # Fallback to realistic synthetic multi-tenant cluster
             cluster = get_synthetic_cluster()
             for w_spec, w_metrics in cluster:
                 if self.namespace and w_spec.namespace != self.namespace:
@@ -89,10 +114,25 @@ state = WebStudioState()
 
 @app.get("/api/cluster/summary", response_model=ClusterSummary)
 def get_cluster_summary():
-    """Returns aggregated cluster FinOps metrics and rightsizing recommendations."""
+    """Returns aggregated cluster FinOps metrics, node bin-packing, and recommendations."""
     if not state.summary:
         state._refresh()
     return state.summary
+
+
+@app.get("/api/contexts")
+def list_contexts():
+    """Lists available Kubernetes cluster contexts."""
+    k8s = KubernetesClient()
+    return {"contexts": k8s.list_available_contexts(), "active_context": state.context}
+
+
+@app.get("/api/binpack", response_model=Optional[BinPackingResult])
+def get_binpack_simulation():
+    """Returns Karpenter / Cluster Autoscaler node bin-packing simulation."""
+    if not state.summary:
+        state._refresh()
+    return state.summary.bin_packing
 
 
 @app.get("/api/profiles")
@@ -109,17 +149,21 @@ def get_pricing():
 
 @app.post("/api/scan", response_model=ClusterSummary)
 def trigger_scan(req: ScanRequest):
-    """Triggers recalculation across cloud providers, profiles, and namespaces."""
+    """Triggers recalculation across cloud providers, profiles, What-If headroom sliders, and namespaces."""
     state.provider = req.provider
     state.profile = req.profile
     state.namespace = req.namespace
+    state.context = req.context
+    state.custom_cpu_buffer = req.custom_cpu_buffer
+    state.custom_memory_buffer = req.custom_memory_buffer
+    state.custom_percentile = req.custom_percentile
     state._refresh()
     return state.summary
 
 
 @app.get("/api/patch/{namespace}/{workload_name}")
 def get_workload_patch(namespace: str, workload_name: str):
-    """Generates Kustomize strategic merge patch and kubectl patch one-liner."""
+    """Generates Kustomize strategic merge patch, kubectl one-liner, and HPA status."""
     rec = next(
         (r for r in state.recommendations if r.namespace == namespace and r.workload_name == workload_name),
         None,
@@ -134,6 +178,8 @@ def get_workload_patch(namespace: str, workload_name: str):
         "workload_name": workload_name,
         "kustomize_patch": kustomize,
         "kubectl_command": kubectl_cmd,
+        "hpa_warning": rec.hpa_warning.model_dump() if rec.hpa_warning else None,
+        "spot_recommendation": rec.spot_recommendation.model_dump() if rec.spot_recommendation else None,
     }
 
 
@@ -203,6 +249,5 @@ def serve_dashboard():
     return HTMLResponse("<h1>KubeTrim Web Studio</h1><p>Static index.html not found.</p>")
 
 
-# Mount static assets if directory exists
 if STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

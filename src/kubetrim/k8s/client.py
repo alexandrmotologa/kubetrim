@@ -1,15 +1,17 @@
-"""Kubernetes workload discovery client for live clusters and local manifests."""
+"""Kubernetes workload, node, HPA, and PDB discovery client with multi-context support."""
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 import yaml
 
 from kubetrim.core.models import (
     ContainerResources,
     ContainerSpec,
+    HPAConfig,
+    NodeSpec,
     ResourceLimits,
     ResourceQuantity,
     ResourceRequests,
@@ -28,7 +30,7 @@ SYSTEM_NAMESPACES = {
 
 
 class KubernetesClient:
-    """Read-only client for discovering workloads and resource configurations."""
+    """Read-only client for discovering workloads, nodes, HPAs, and cluster contexts."""
 
     def __init__(
         self,
@@ -40,7 +42,25 @@ class KubernetesClient:
         self._apps_v1 = None
         self._core_v1 = None
         self._custom_api = None
+        self._autoscaling = None
+        self._policy_v1 = None
         self._connected = False
+
+    def list_available_contexts(self) -> List[str]:
+        """Lists all context names found in the kubeconfig file."""
+        try:
+            from kubernetes import config
+            contexts, active_context = config.list_kube_config_contexts(config_file=self.kubeconfig_path)
+            return [c.get("name") for c in contexts if c.get("name")]
+        except Exception as e:
+            logger.debug(f"Could not list kubeconfig contexts: {e}")
+            return []
+
+    def switch_context(self, context_name: str) -> bool:
+        """Switches connection context and re-initializes client."""
+        self.context = context_name
+        self._connected = False
+        return self.connect()
 
     def connect(self) -> bool:
         """Initializes connection to Kubernetes API using kubeconfig or in-cluster credentials."""
@@ -60,6 +80,15 @@ class KubernetesClient:
             self._apps_v1 = client.AppsV1Api()
             self._core_v1 = client.CoreV1Api()
             self._custom_api = client.CustomObjectsApi()
+            try:
+                self._autoscaling = client.AutoscalingV2Api()
+            except Exception:
+                self._autoscaling = client.AutoscalingV1Api()
+            try:
+                self._policy_v1 = client.PolicyV1Api()
+            except Exception:
+                self._policy_v1 = None
+
             return True
         except Exception as e:
             logger.debug(f"Could not connect to live Kubernetes cluster: {e}")
@@ -70,16 +99,120 @@ class KubernetesClient:
     def is_connected(self) -> bool:
         return self._connected
 
+    def discover_hpas(self, namespace: Optional[str] = None) -> Dict[Tuple[str, str], HPAConfig]:
+        """Discovers HorizontalPodAutoscalers and indexes them by (namespace, target_name)."""
+        if not self._connected or not self._autoscaling:
+            return {}
+
+        hpa_map: Dict[Tuple[str, str], HPAConfig] = {}
+        try:
+            items = (
+                self._autoscaling.list_namespaced_horizontal_pod_autoscaler(namespace=namespace).items
+                if namespace
+                else self._autoscaling.list_horizontal_pod_autoscaler_for_all_namespaces().items
+            )
+
+            for item in items:
+                ns = item.metadata.namespace
+                target_name = item.spec.scale_target_ref.name
+                min_reps = item.spec.min_replicas or 1
+                max_reps = item.spec.max_replicas or 10
+                current_reps = item.status.current_replicas or min_reps
+
+                target_cpu_pct = None
+                # Check autoscaling/v2 metrics
+                if hasattr(item.spec, "metrics") and item.spec.metrics:
+                    for m in item.spec.metrics:
+                        if m.type == "Resource" and m.resource.name == "cpu":
+                            if hasattr(m.resource.target, "average_utilization"):
+                                target_cpu_pct = m.resource.target.average_utilization
+                elif hasattr(item.spec, "target_cpu_utilization_percentage"):
+                    target_cpu_pct = item.spec.target_cpu_utilization_percentage
+
+                hpa_map[(ns, target_name)] = HPAConfig(
+                    min_replicas=min_reps,
+                    max_replicas=max_reps,
+                    current_replicas=current_reps,
+                    target_cpu_utilization_pct=target_cpu_pct,
+                )
+        except Exception as e:
+            logger.debug(f"HPA discovery query error: {e}")
+
+        return hpa_map
+
+    def discover_pdbs(self, namespace: Optional[str] = None) -> Set[Tuple[str, str]]:
+        """Discovers PodDisruptionBudgets and indexes by (namespace, selector_app)."""
+        if not self._connected or not self._policy_v1:
+            return set()
+
+        pdb_set: Set[Tuple[str, str]] = set()
+        try:
+            items = (
+                self._policy_v1.list_namespaced_pod_disruption_budget(namespace=namespace).items
+                if namespace
+                else self._policy_v1.list_pod_disruption_budget_for_all_namespaces().items
+            )
+            for item in items:
+                ns = item.metadata.namespace
+                match_labels = item.spec.selector.match_labels if item.spec.selector else {}
+                app_label = match_labels.get("app") or match_labels.get("app.kubernetes.io/name")
+                if app_label:
+                    pdb_set.add((ns, app_label))
+        except Exception as e:
+            logger.debug(f"PDB discovery error: {e}")
+
+        return pdb_set
+
+    def discover_cluster_nodes(self) -> List[NodeSpec]:
+        """Discovers physical worker nodes and allocatable capacities."""
+        if not self._connected or not self._core_v1:
+            return []
+
+        nodes: List[NodeSpec] = []
+        try:
+            node_items = self._core_v1.list_node().items
+            for node in node_items:
+                labels = node.metadata.labels or {}
+                allocatable = node.status.allocatable or {}
+
+                inst_type = labels.get("node.kubernetes.io/instance-type") or labels.get("beta.kubernetes.io/instance-type", "m6i.xlarge")
+                zone = labels.get("topology.kubernetes.io/zone") or labels.get("failure-domain.beta.kubernetes.io/zone", "default")
+                is_spot = (
+                    labels.get("karpenter.sh/capacity-type") == "spot"
+                    or labels.get("eks.amazonaws.com/capacityType") == "SPOT"
+                    or labels.get("cloud.google.com/gke-spot") == "true"
+                )
+
+                cpu_cores = ResourceQuantity.parse_cpu(allocatable.get("cpu", "4"))
+                mem_mb = ResourceQuantity.parse_memory_mb(allocatable.get("memory", "16Gi"))
+
+                nodes.append(
+                    NodeSpec(
+                        name=node.metadata.name,
+                        instance_type=inst_type,
+                        allocatable_cpu_cores=cpu_cores,
+                        allocatable_memory_mb=mem_mb,
+                        zone=zone,
+                        is_spot=is_spot,
+                    )
+                )
+        except Exception as e:
+            logger.debug(f"Node listing error: {e}")
+
+        return nodes
+
     def discover_cluster_workloads(
         self,
         namespace: Optional[str] = None,
         exclude_system: bool = True,
     ) -> List[WorkloadSpec]:
-        """Discovers Deployments, StatefulSets, and DaemonSets from the live cluster."""
+        """Discovers Deployments, StatefulSets, and DaemonSets, enriching them with HPA and PDB configs."""
         if not self._connected and not self.connect():
             return []
 
         workloads: List[WorkloadSpec] = []
+        hpas = self.discover_hpas(namespace=namespace)
+        pdbs = self.discover_pdbs(namespace=namespace)
 
         try:
             # 1. Deployments
@@ -94,6 +227,8 @@ class KubernetesClient:
                     continue
                 spec = self._parse_k8s_workload(item, WorkloadKind.DEPLOYMENT)
                 if spec:
+                    spec.hpa = hpas.get((ns, spec.name))
+                    spec.has_pdb = (ns, spec.name) in pdbs or (ns, spec.labels.get("app")) in pdbs
                     workloads.append(spec)
 
             # 2. StatefulSets

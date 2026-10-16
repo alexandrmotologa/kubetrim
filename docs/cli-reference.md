@@ -9,7 +9,7 @@ Usage: kubetrim [OPTIONS] COMMAND [ARGS]...
 
 Options:
   --kubeconfig PATH      Path to kubeconfig file [default: ~/.kube/config]
-  --context TEXT         Kubernetes context name
+  --context TEXT         Kubernetes context name from ~/.kube/config
   --help                 Show this message and exit
 ```
 
@@ -27,6 +27,7 @@ kubetrim scan [OPTIONS]
 
 **Options:**
 - `--namespace, -n TEXT`: Target namespace (defaults to all non-system namespaces).
+- `--context TEXT`: Specific cluster context name from kubeconfig.
 - `--provider, -p [aws|gcp|azure|baremetal]`: Cloud provider pricing model [default: `aws`].
 - `--profile TEXT`: Rightsizing profile name (`conservative`, `balanced`, `aggressive`) [default: `balanced`].
 - `--prometheus-url TEXT`: URL to Prometheus server for historical metrics.
@@ -37,9 +38,71 @@ kubetrim scan [OPTIONS]
 
 ---
 
+### `binpack`
+
+Simulates Karpenter and Kubernetes Cluster Autoscaler multi-dimensional node bin-packing to compute physical worker node consolidation, removable node counts, and net cloud bill savings.
+
+```bash
+kubetrim binpack [OPTIONS]
+```
+
+**Options:**
+- `--provider, -p [aws|gcp|azure|baremetal]`: Cloud provider pricing rate card [default: `aws`].
+- `--profile TEXT`: Rightsizing profile [default: `balanced`].
+- `--instance-type TEXT`: Default worker node instance type [default: `m6i.xlarge`].
+- `--namespace, -n TEXT`: Namespace filter.
+
+---
+
+### `gate`
+
+Enforces FinOps budget guardrails in CI/CD pipelines. Evaluates workloads in local manifests or live clusters and exits with code 1 if detected waste breaches configured thresholds.
+
+```bash
+kubetrim gate [OPTIONS]
+```
+
+**Options:**
+- `--manifest, -m PATH`: Path to local Kubernetes manifest file or directory to evaluate.
+- `--max-waste-usd FLOAT`: Maximum allowed monthly recoverable waste in dollars [default: `100.0`].
+- `--max-waste-pct FLOAT`: Maximum allowed waste percentage [default: `35.0`].
+- `--fail-on-waste / --no-fail-on-waste`: Return non-zero exit code 1 on budget breach [default: `--no-fail-on-waste`].
+- `--pr-comment-file PATH`: Output path for formatted GitHub PR Markdown summary table.
+- `--provider, -p TEXT`: Cloud provider pricing rate card [default: `aws`].
+- `--profile TEXT`: Rightsizing profile [default: `balanced`].
+
+---
+
+### `gitops-export`
+
+Creates a dedicated Git branch and commits rightsized Kubernetes manifests or Helm `values.yaml` patches ready for automated Pull Request creation.
+
+```bash
+kubetrim gitops-export [OPTIONS] PATH
+```
+
+**Options:**
+- `PATH`: Path to Kubernetes YAML manifest file or Helm `values.yaml`.
+- `--branch, -b TEXT`: Name of Git branch to create (defaults to `finops/rightsize-<workload>-<timestamp>`).
+- `--dry-run`: Preview patch diff without writing files or creating Git commits.
+- `--provider, -p TEXT`: Cloud provider pricing rate card [default: `aws`].
+- `--profile TEXT`: Rightsizing profile [default: `balanced`].
+
+---
+
+### `contexts`
+
+Discovers and lists all available Kubernetes cluster contexts configured in `~/.kube/config`.
+
+```bash
+kubetrim contexts
+```
+
+---
+
 ### `diff`
 
-Generates unified diff patches for local Kubernetes manifests or Helm charts against live cluster recommendations or metrics files.
+Generates unified diff patches or Kustomize overlays for local Kubernetes manifests against live cluster recommendations or metrics files.
 
 ```bash
 kubetrim diff [OPTIONS] PATH
@@ -49,7 +112,7 @@ kubetrim diff [OPTIONS] PATH
 - `--profile TEXT`: Rightsizing profile [default: `balanced`].
 - `--provider TEXT`: Cloud provider for cost metrics [default: `aws`].
 - `--output, -o PATH`: Output file path for generated unified diff.
-- `--kustomize`: Generate Kustomize patch syntax instead of standard unified diff.
+- `--kustomize`: Generate Kustomize strategic merge patch syntax instead of unified diff.
 
 ---
 
@@ -71,7 +134,7 @@ kubetrim patch [OPTIONS] PATH
 
 ### `tui`
 
-Launches the interactive terminal user interface powered by Textual.
+Launches the interactive terminal user interface powered by Textual, featuring live node bin-packing KPIs, HPA conflict guards, and Spot indicators.
 
 ```bash
 kubetrim tui [OPTIONS]
@@ -86,7 +149,7 @@ kubetrim tui [OPTIONS]
 
 ### `web`
 
-Starts the browser-based FinOps Web Studio powered by FastAPI.
+Starts the browser-based FinOps Web Studio powered by FastAPI, featuring interactive What-If headroom sliders and Karpenter bin-packing density explorer.
 
 ```bash
 kubetrim web [OPTIONS]

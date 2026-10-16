@@ -69,3 +69,41 @@ def test_web_ui_dashboard():
     resp = client.get("/")
     assert resp.status_code == 200
     assert "KubeTrim" in resp.text
+    assert "What-If Headroom Simulator" in resp.text
+
+
+def test_api_contexts():
+    resp = client.get("/api/contexts")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "contexts" in data
+    assert "active_context" in data
+
+
+def test_api_binpack():
+    resp = client.get("/api/binpack")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data is not None
+    assert "current_node_count" in data
+    assert "rightsized_node_count" in data
+    assert "removable_nodes_count" in data
+    assert "nodes_summary" in data
+
+
+def test_api_scan_what_if_sliders():
+    resp = client.post(
+        "/api/scan",
+        json={
+            "provider": "aws",
+            "profile": "balanced",
+            "custom_cpu_buffer": 0.35,
+            "custom_memory_buffer": 0.45,
+            "custom_percentile": 0.99,
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["profile_name"] == "custom"
+    assert data["total_monthly_savings"] > 0
+

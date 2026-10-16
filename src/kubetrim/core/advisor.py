@@ -1,8 +1,9 @@
-"""Rightsizing advisor and safety headroom recommendation engine."""
+"""Rightsizing advisor, HPA conflict detection, Spot arbitrage, and safety headroom engine."""
 
 from __future__ import annotations
 
 from typing import List, Optional
+from kubetrim.core.binpack import NodeBinPackingSimulator
 from kubetrim.core.config import RightsizingProfile
 from kubetrim.core.cost import PricingModel, calculate_cost_breakdown
 from kubetrim.core.models import (
@@ -10,7 +11,10 @@ from kubetrim.core.models import (
     ContainerRecommendation,
     ContainerSpec,
     ContainerUsageMetrics,
+    HPAWarning,
     ResourceQuantity,
+    SpotRecommendation,
+    WorkloadKind,
     WorkloadMetrics,
     WorkloadRecommendation,
     WorkloadSpec,
@@ -18,7 +22,7 @@ from kubetrim.core.models import (
 
 
 class RightsizingAdvisor:
-    """Analyzes workload specifications and historical metrics to generate rightsizing recommendations."""
+    """Analyzes workload specifications, metrics, HPAs, and nodes to generate actionable FinOps guidance."""
 
     def __init__(self, profile: RightsizingProfile, pricing: PricingModel):
         self.profile = profile
@@ -55,12 +59,10 @@ class RightsizingAdvisor:
         action_notes = []
 
         if container_metrics is not None:
-            # CPU Recommendation
             observed_cpu = self._get_percentile_value(container_metrics, "cpu")
             rec_cpu_raw = observed_cpu * (1.0 + self.profile.cpu_headroom_buffer)
             rec_cpu = max(rec_cpu_raw, self.profile.min_cpu_cores)
 
-            # Memory Recommendation & OOMKill Guard
             observed_mem = self._get_percentile_value(container_metrics, "memory")
             mem_buffer = self.profile.memory_headroom_buffer
 
@@ -74,7 +76,6 @@ class RightsizingAdvisor:
             rec_mem_raw = observed_mem * (1.0 + mem_buffer)
             rec_mem = max(rec_mem_raw, self.profile.min_memory_mb)
 
-            # Limits Calculation
             if self.profile.qos_class_preference.lower() == "guaranteed":
                 lim_cpu = rec_cpu
                 lim_mem = rec_mem
@@ -84,14 +85,12 @@ class RightsizingAdvisor:
                 lim_cpu = max(rec_cpu * self.profile.limit_cpu_multiplier, peak_cpu * 1.10)
                 lim_mem = max(rec_mem * self.profile.limit_memory_multiplier, peak_mem * 1.15)
         else:
-            # Fallback if no metrics available: retain current or apply floor
             rec_cpu = max(curr_req_cpu, self.profile.min_cpu_cores) if curr_req_cpu > 0 else self.profile.min_cpu_cores
             rec_mem = max(curr_req_mem, self.profile.min_memory_mb) if curr_req_mem > 0 else self.profile.min_memory_mb
             lim_cpu = curr_lim_cpu if curr_lim_cpu > 0 else rec_cpu * self.profile.limit_cpu_multiplier
             lim_mem = curr_lim_mem if curr_lim_mem > 0 else rec_mem * self.profile.limit_memory_multiplier
             action_notes.append("No historical metrics found; using fallback safety floor")
 
-        # Format Kubernetes strings
         str_rec_req_cpu = ResourceQuantity.format_cpu(rec_cpu)
         str_rec_req_mem = ResourceQuantity.format_memory(rec_mem)
         str_rec_lim_cpu = ResourceQuantity.format_cpu(lim_cpu)
@@ -129,12 +128,93 @@ class RightsizingAdvisor:
             action_note="; ".join(action_notes),
         )
 
+    def _evaluate_hpa_conflict(
+        self,
+        workload: WorkloadSpec,
+        container_recs: List[ContainerRecommendation],
+    ) -> Optional[HPAWarning]:
+        """Detects if rightsizing requests will alter HPA utilization trigger points."""
+        if not workload.hpa:
+            return None
+
+        hpa = workload.hpa
+        target_pct = hpa.target_cpu_utilization_pct or 80
+
+        curr_cpu_sum = sum(ResourceQuantity.parse_cpu(c.current_request_cpu) for c in container_recs)
+        rec_cpu_sum = sum(ResourceQuantity.parse_cpu(c.recommended_request_cpu) for c in container_recs)
+
+        if curr_cpu_sum <= 0 or rec_cpu_sum <= 0:
+            return None
+
+        orig_trigger = curr_cpu_sum * (target_pct / 100.0)
+        new_trigger = rec_cpu_sum * (target_pct / 100.0)
+
+        if orig_trigger > new_trigger * 1.25:
+            suggested_pct = min(95, int(round((orig_trigger / rec_cpu_sum) * 100.0)))
+            msg = (
+                f"HPA Conflict: lowering requests shifts trigger from {orig_trigger:.2f} cores to {new_trigger:.2f} cores. "
+                f"Consider raising HPA target to {suggested_pct}% or adjusting minReplicas."
+            )
+            return HPAWarning(
+                has_hpa=True,
+                original_target_pct=target_pct,
+                original_trigger_cpu_cores=round(orig_trigger, 3),
+                rightsized_trigger_cpu_cores=round(new_trigger, 3),
+                suggested_target_pct=suggested_pct,
+                warning_message=msg,
+            )
+
+        return HPAWarning(
+            has_hpa=True,
+            original_target_pct=target_pct,
+            original_trigger_cpu_cores=round(orig_trigger, 3),
+            rightsized_trigger_cpu_cores=round(new_trigger, 3),
+            suggested_target_pct=target_pct,
+            warning_message="HPA scaling targets aligned.",
+        )
+
+    def _evaluate_spot_recommendation(
+        self,
+        workload: WorkloadSpec,
+        rec_monthly_cost: float,
+    ) -> Optional[SpotRecommendation]:
+        """Assesses disruption tolerance for 65% Spot instance arbitrage."""
+        if workload.kind != WorkloadKind.DEPLOYMENT:
+            return SpotRecommendation(
+                eligible_for_spot=False,
+                has_pdb=workload.has_pdb,
+                disruption_tolerance_score=10,
+                reason=f"Stateful workloads ({workload.kind.value}) not recommended for Spot evictions.",
+            )
+
+        if workload.replicas < 2:
+            return SpotRecommendation(
+                eligible_for_spot=False,
+                has_pdb=workload.has_pdb,
+                disruption_tolerance_score=25,
+                reason="Single-replica workloads risk downtime during node eviction.",
+            )
+
+        spot_cost = round(rec_monthly_cost * 0.35, 2)
+        additional_savings = round(rec_monthly_cost - spot_cost, 2)
+        score = 95 if workload.has_pdb else 75
+
+        return SpotRecommendation(
+            eligible_for_spot=True,
+            has_pdb=workload.has_pdb,
+            disruption_tolerance_score=score,
+            current_on_demand_monthly_cost=rec_monthly_cost,
+            potential_spot_monthly_cost=spot_cost,
+            additional_spot_savings=additional_savings,
+            reason=f"Multi-replica stateless deployment. Spot migration yields extra ${additional_savings:.2f}/mo (65% off).",
+        )
+
     def advise_workload(
         self,
         workload: WorkloadSpec,
         metrics: Optional[WorkloadMetrics] = None,
     ) -> WorkloadRecommendation:
-        """Generates rightsizing recommendations for all containers within a workload."""
+        """Generates rightsizing recommendations, HPA conflict checks, and Spot advice for a workload."""
         container_recs: List[ContainerRecommendation] = []
         metrics_by_container = {m.container_name: m for m in (metrics.containers if metrics else [])}
 
@@ -158,6 +238,9 @@ class RightsizingAdvisor:
         total_savings = round(total_savings, 2)
         savings_pct = round((total_savings / total_curr_cost * 100.0) if total_curr_cost > 0 else 0.0, 1)
 
+        hpa_warn = self._evaluate_hpa_conflict(workload, container_recs)
+        spot_rec = self._evaluate_spot_recommendation(workload, total_rec_cost)
+
         return WorkloadRecommendation(
             namespace=workload.namespace,
             workload_name=workload.name,
@@ -170,13 +253,15 @@ class RightsizingAdvisor:
             savings_pct=savings_pct,
             oomkill_detected=oomkill_flag,
             manifest_path=workload.manifest_path,
+            hpa_warning=hpa_warn,
+            spot_recommendation=spot_rec,
         )
 
     def generate_cluster_summary(
         self,
         recommendations: List[WorkloadRecommendation],
     ) -> ClusterSummary:
-        """Aggregates workload recommendations into a cluster-level FinOps summary."""
+        """Aggregates workload recommendations, simulates node bin-packing, and computes cluster FinOps metrics."""
         total_workloads = len(recommendations)
         total_containers = sum(len(w.containers) for w in recommendations)
         total_replicas = sum(w.replicas for w in recommendations)
@@ -186,6 +271,20 @@ class RightsizingAdvisor:
         total_savings = round(sum(w.total_monthly_savings for w in recommendations), 2)
         savings_pct = round((total_savings / total_current_cost * 100.0) if total_current_cost > 0 else 0.0, 1)
         annual_savings = round(total_savings * 12.0, 2)
+
+        # Total potential Spot savings
+        total_spot_savings = round(
+            sum(
+                w.spot_recommendation.additional_spot_savings
+                for w in recommendations
+                if w.spot_recommendation and w.spot_recommendation.eligible_for_spot
+            ),
+            2,
+        )
+
+        # Run Node Bin-Packing Simulation
+        binpack_sim = NodeBinPackingSimulator()
+        binpack_res = binpack_sim.simulate(recommendations)
 
         return ClusterSummary(
             total_workloads=total_workloads,
@@ -200,4 +299,6 @@ class RightsizingAdvisor:
             region=self.pricing.region,
             profile_name=self.profile.name,
             recommendations=recommendations,
+            bin_packing=binpack_res,
+            total_spot_potential_savings=total_spot_savings,
         )
